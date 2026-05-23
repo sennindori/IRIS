@@ -1,0 +1,6 @@
+{
+  "name": "I.R.I.S",
+  "description": "Real-time inventory replenishment system with barcode scanning and Yahoo! Shopping API product lookup.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function isValidReplenishmentItem(data) {
+      return (data.get('janCode', 'STANDARD') is string)
+        && (data.get('productName', '') is string)
+        && (data.get('quantity', '1') is string)
+        && (data.get('unit', '個') is string)
+        && (data.get('maker', null) == null || data.get('maker', '') is string)
+        && (data.get('status', 'pending') in ['pending', 'completed'])
+        && (data.get('imageUrl', null) == null || (data.get('imageUrl', '') is string))
+        && (data.get('createdAt', request.time) is timestamp);
+    }
+
+    match /replenishment_list/{itemId} {
+      allow read: if true;
+      allow create: if isValidReplenishmentItem(request.resource.data) 
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.createdAt == request.time;
+      allow update: if isValidReplenishmentItem(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /standard_items/{itemId} {
+      allow read: if true;
+      allow create: if request.resource.data.name is string 
+                    && (request.resource.data.get('janCode', 'STANDARD') is string)
+                    && request.resource.data.createdAt == request.time;
+      allow update: if request.resource.data.name is string;
+      allow delete: if true;
+    }
+  }
+}

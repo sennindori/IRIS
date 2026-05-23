@@ -1,0 +1,28 @@
+{
+  "entities": {
+    "ReplenishmentItem": {
+      "title": "Replenishment Item",
+      "description": "Represents an item requested for replenishment from the store floor.",
+      "type": "object",
+      "properties": {
+        "janCode": { "type": "string", "description": "The barcode (JAN code) of the product." },
+        "productName": { "type": "string", "description": "The name of the product." },
+        "quantity": { "type": "string", "description": "The quantity to replenish (e.g., '2 cases', '5 items')." },
+        "status": { 
+          "type": "string", 
+          "enum": ["pending", "completed"],
+          "description": "The current status of the replenishment request."
+        },
+        "imageUrl": { "type": "string", "description": "URL to the product image." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the request was created." }
+      },
+      "required": ["janCode", "productName", "quantity", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/replenishment_list/{itemId}": {
+      "schema": "ReplenishmentItem",
+      "description": "Collection of all replenishment requests."
+    }
+  }
+}
