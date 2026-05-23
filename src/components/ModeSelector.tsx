@@ -21,36 +21,36 @@ export default function ModeSelector({ onSelect }: ModeSelectorProps) {
   ];
 
   return (
-    <div className="flex flex-col h-screen max-h-screen p-4 bg-gray-50 overflow-hidden">
-      <header className="py-8 text-center shrink-0">
-        <h1 className="text-5xl font-black text-blue-600 tracking-tighter">I.R.I.S</h1>
-        <p className="text-[11px] text-gray-400 font-medium uppercase mt-2 tracking-[0.25em] leading-none font-condensed">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-4 pb-6 bg-gray-50 overflow-hidden">
+      <header className="py-4 sm:py-6 md:py-8 text-center shrink-0">
+        <h1 className="text-4xl sm:text-5xl font-black text-blue-600 tracking-tighter">I.R.I.S</h1>
+        <p className="text-[10px] sm:text-[11px] text-gray-400 font-medium uppercase mt-1.5 sm:mt-2 tracking-[0.25em] leading-none font-condensed">
           Inventory Replenishment Information System
         </p>
       </header>
 
-      <div className="flex-1 flex flex-col gap-3 max-w-lg mx-auto w-full overflow-y-auto pb-4">
+      <div className="flex-1 flex flex-col gap-2.5 sm:gap-3 max-w-lg mx-auto w-full overflow-y-auto pb-3">
         {modes.map((mode) => (
           <motion.button
             key={mode.id}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
             onClick={() => onSelect(mode.id)}
-            className="flex-1 flex items-center p-6 bg-white rounded-[32px] shadow-lg shadow-gray-200/50 border border-white transition-all active:shadow-none min-h-[90px]"
+            className="flex-1 flex items-center p-4 sm:p-6 bg-white rounded-[24px] sm:rounded-[32px] shadow-lg shadow-gray-200/50 border border-white transition-all active:shadow-none min-h-[76px] sm:min-h-[90px]"
             id={`mode-btn-${mode.id}`}
           >
-            <div className={`${mode.color} p-4 rounded-2xl text-white mr-6 shrink-0`}>
-              <mode.icon size={28} />
+            <div className={`${mode.color} p-3 sm:p-4 rounded-xl sm:rounded-2xl text-white mr-4 sm:mr-6 shrink-0`}>
+              <mode.icon size={24} className="sm:w-7 sm:h-7" />
             </div>
             <div className="text-left">
-              <h2 className="text-xl font-black text-gray-900 leading-tight">{mode.label}</h2>
-              <p className="text-sm text-gray-500 font-medium mt-0.5">{mode.desc}</p>
+              <h2 className="text-lg sm:text-xl font-black text-gray-900 leading-tight">{mode.label}</h2>
+              <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">{mode.desc}</p>
             </div>
           </motion.button>
         ))}
       </div>
 
-      <footer className="mt-auto pt-4 pb-2 border-t border-gray-100 flex items-center justify-between max-w-lg mx-auto w-full shrink-0">
+      <footer className="mt-auto pt-3 pb-safe border-t border-gray-100 flex items-center justify-between max-w-lg mx-auto w-full shrink-0">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
             <QrCode size={20} />
