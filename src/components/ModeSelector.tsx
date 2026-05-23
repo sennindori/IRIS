@@ -1,6 +1,6 @@
-import React from 'react';
-import { Scan, Eye, Edit3, LayoutGrid } from 'lucide-react';
-import { motion } from 'motion/react';
+import React, { useState } from 'react';
+import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { AppMode } from '../types';
 
 interface ModeSelectorProps {
@@ -8,6 +8,11 @@ interface ModeSelectorProps {
 }
 
 export default function ModeSelector({ onSelect }: ModeSelectorProps) {
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const appUrl = typeof window !== 'undefined' ? window.location.href : '';
+
   const modes = [
     { id: 'scan' as AppMode, label: 'スキャン', icon: Scan, color: 'bg-blue-600', desc: '依頼入力' },
     { id: 'quick' as AppMode, label: '定番商品', icon: LayoutGrid, color: 'bg-amber-500', desc: 'リストから選択' },
@@ -24,14 +29,14 @@ export default function ModeSelector({ onSelect }: ModeSelectorProps) {
         </p>
       </header>
 
-      <div className="flex-1 flex flex-col gap-3 max-w-lg mx-auto w-full pb-6">
+      <div className="flex-1 flex flex-col gap-3 max-w-lg mx-auto w-full overflow-y-auto pb-4">
         {modes.map((mode) => (
           <motion.button
             key={mode.id}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => onSelect(mode.id)}
-            className="flex-1 flex items-center p-6 bg-white rounded-[32px] shadow-lg shadow-gray-200/50 border border-white transition-all active:shadow-none min-h-0"
+            className="flex-1 flex items-center p-6 bg-white rounded-[32px] shadow-lg shadow-gray-200/50 border border-white transition-all active:shadow-none min-h-[90px]"
             id={`mode-btn-${mode.id}`}
           >
             <div className={`${mode.color} p-4 rounded-2xl text-white mr-6 shrink-0`}>
@@ -44,6 +49,97 @@ export default function ModeSelector({ onSelect }: ModeSelectorProps) {
           </motion.button>
         ))}
       </div>
+
+      <footer className="mt-auto pt-4 pb-2 border-t border-gray-100 flex items-center justify-between max-w-lg mx-auto w-full shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+            <QrCode size={20} />
+          </div>
+          <div className="text-left">
+            <p className="text-xs font-black text-gray-900 leading-none">スマホでスキャン</p>
+            <p className="text-[10px] text-gray-400 font-medium mt-1">カメラで読み取ってスマホで操作</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setShowQrModal(true)}
+          className="p-1 px-3 bg-white border border-gray-100 hover:bg-gray-50 active:scale-95 transition-all shadow-sm rounded-xl flex items-center gap-2"
+        >
+          <img 
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(appUrl)}`} 
+            alt="QR" 
+            className="w-8 h-8 rounded border border-gray-100"
+            loading="lazy"
+          />
+          <Maximize2 size={12} className="text-gray-400" />
+        </button>
+      </footer>
+
+      <AnimatePresence>
+        {showQrModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowQrModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-white rounded-[40px] p-8 shadow-2xl border border-gray-100 z-10 text-center"
+            >
+              <h3 className="text-2xl font-black text-gray-900 leading-tight tracking-tight mb-2">スマホと連携</h3>
+              <p className="text-xs text-gray-400 font-medium px-4 mb-6 leading-relaxed">
+                カメラで下のコードをスキャンすると、スマートフォンなどの他の端末で表示・操作が可能です。
+              </p>
+
+              <div className="relative mx-auto w-56 h-56 bg-gray-50 border-4 border-white shadow-xl rounded-[32px] overflow-hidden flex items-center justify-center p-4 mb-6">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(appUrl)}`}
+                  alt="App Webapp QR Code"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded-2xl flex items-center justify-between gap-2 max-w-full text-left mb-6 border border-gray-100">
+                <span className="text-[11px] font-mono font-bold text-gray-500 truncate max-w-[200px] pl-1">
+                  {appUrl}
+                </span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(appUrl);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="p-2 bg-white hover:bg-gray-100 border border-gray-100 active:scale-95 transition-transform rounded-xl text-gray-600 shrink-0 flex items-center gap-1 text-[10px] font-bold"
+                >
+                  {copied ? (
+                    <>
+                      <Check size={12} className="text-green-500" />
+                      <span>コピー済</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={12} />
+                      <span>コピー</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black active:scale-[0.98] transition-transform shadow-lg shadow-gray-200"
+              >
+                閉じる
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
