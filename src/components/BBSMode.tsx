@@ -11,7 +11,8 @@ import {
   serverTimestamp,
   arrayUnion,
   arrayRemove,
-  getDocs
+  getDocs,
+  increment
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { BbsMessage, BbsReply, AppMode } from '../types';
@@ -85,8 +86,35 @@ export default function BBSMode({ onBack, username }: BBSModeProps) {
   // Reply section states
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
   const [replies, setReplies] = useState<{ [messageId: string]: BbsReply[] }>({});
+  const [localReplyCounts, setLocalReplyCounts] = useState<{ [messageId: string]: number }>({});
   const [newReplyContent, setNewReplyContent] = useState('');
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+
+  // Fetch reply counts for all messages to ensure they are visible on load and self-heal any missing counts
+  useEffect(() => {
+    if (messages.length === 0) return;
+
+    messages.forEach(async (msg) => {
+      // If we already have a locally cached count matching the msg's replyCount, skip to avoid redundant fetches
+      if (localReplyCounts[msg.id] !== undefined && localReplyCounts[msg.id] === msg.replyCount) return;
+
+      try {
+        const path = `bbs_messages/${msg.id}/replies`;
+        const snap = await getDocs(collection(db, path));
+        const cnt = snap.size;
+
+        setLocalReplyCounts(prev => ({ ...prev, [msg.id]: cnt }));
+
+        // Self-heal: Update Firestore in the background if the counts are desynchronized or blank
+        if (msg.replyCount !== cnt) {
+          const docRef = doc(db, 'bbs_messages', msg.id);
+          await updateDoc(docRef, { replyCount: cnt });
+        }
+      } catch (err) {
+        console.error(`Error fetching replies count for ${msg.id}:`, err);
+      }
+    });
+  }, [messages]);
 
   // Realtime subscription for posts
   useEffect(() => {
@@ -106,6 +134,7 @@ export default function BBSMode({ onBack, username }: BBSModeProps) {
           likesCount: data.likesCount || 0,
           likedBy: data.likedBy || [],
           readBy: data.readBy || [],
+          replyCount: data.replyCount || 0,
         });
       });
       setMessages(msgs);
@@ -204,6 +233,11 @@ export default function BBSMode({ onBack, username }: BBSModeProps) {
         author: username,
         content: replyTrimmed,
         createdAt: serverTimestamp(),
+      });
+      // Increment replyCount in backend to keep dashboard / lists synced in real time
+      const parentDocRef = doc(db, 'bbs_messages', messageId);
+      await updateDoc(parentDocRef, {
+        replyCount: increment(1)
       });
       setNewReplyContent('');
     } catch (error) {
@@ -521,7 +555,7 @@ export default function BBSMode({ onBack, username }: BBSModeProps) {
                         }`}
                       >
                         <MessageCircle size={13} />
-                        <span>コメ返 ({replies[msg.id]?.length || 0})</span>
+                        <span>コメ返 ({replies[msg.id] !== undefined ? replies[msg.id].length : (localReplyCounts[msg.id] !== undefined ? localReplyCounts[msg.id] : (msg.replyCount || 0))})</span>
                       </button>
                     </div>
 
