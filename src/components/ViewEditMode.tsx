@@ -380,48 +380,48 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.95 }}
-                            className="group relative bg-gray-900 rounded-[32px] aspect-[16/11] xs:aspect-auto xs:h-72 lg:h-80 overflow-hidden border border-gray-800/60 shadow-2xl flex flex-col"
+                            className="group relative bg-gray-900 rounded-2xl aspect-[16/9] xs:aspect-auto xs:h-36 sm:h-38 lg:h-40 overflow-hidden border border-gray-800/60 shadow-2xl flex flex-col"
                           >
                             {/* Background product image container */}
                             {item.imageUrl ? (
                               <img 
                                 src={item.imageUrl} 
                                 alt={item.productName} 
-                                className="absolute inset-0 w-full h-full object-contain p-6 bg-white transition-all duration-700 group-hover:scale-105" 
+                                className="absolute inset-0 w-full h-full object-contain p-3 bg-white transition-all duration-700 group-hover:scale-105 animate-fade-in" 
                                 referrerPolicy="no-referrer"
                               />
                             ) : (
                               <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-gray-700">
-                                <Package size={56} strokeWidth={1} className="opacity-30" />
+                                <Package size={36} strokeWidth={1} className="opacity-30" />
                               </div>
                             )}
 
                             {/* Linear Gradient dimming on top of the image to keep text legible */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/50 to-transparent"></div>
+                            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/60 to-transparent"></div>
 
                             {/* Content overlay tags and values */}
-                            <div className="absolute inset-x-0 bottom-0 p-5 z-10 text-left">
-                              <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono mb-2">
+                            <div className="absolute inset-x-0 bottom-0 p-3 sm:p-3.5 z-10 text-left">
+                              <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono mb-1">
                                 <Hash size={11} className="text-blue-400" /> {item.janCode}
                                 <span className="opacity-20">|</span>
                                 <Clock size={11} className="text-gray-500" /> {formatTime(item.createdAt)}
                               </div>
                               
-                              <h3 className="text-base font-black text-white leading-snug mb-4 drop-shadow-md truncate">
+                              <h3 className="text-xs sm:text-sm font-black text-white leading-tight mb-1.5 drop-shadow-md truncate">
                                 {item.productName}
                               </h3>
                               
-                              <div className="flex items-end justify-between gap-3">
+                              <div className="flex items-end justify-between gap-2.5">
                                 <div className="flex-1 min-w-0">
                                   {item.maker && (
-                                    <span className="inline-block px-2.5 py-1 bg-white/10 backdrop-blur-md text-white text-[10px] font-black rounded-lg border border-white/20 uppercase tracking-wider truncate max-w-full">
+                                    <span className="inline-block px-1.5 py-0.5 bg-white/10 backdrop-blur-md text-white text-[9px] font-black rounded-md border border-white/25 uppercase tracking-wider truncate max-w-full">
                                       {item.maker}
                                     </span>
                                   )}
                                 </div>
-                                <div className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] font-black text-3xl shrink-0 flex items-baseline">
+                                <div className="px-2.5 py-1 bg-blue-600 text-white rounded-lg shadow-[0_0_12px_rgba(37,99,235,0.3)] font-black text-base shrink-0 flex items-baseline">
                                   {item.quantity}
-                                  <span className="text-sm ml-1 opacity-80">{item.unit || '個'}</span>
+                                  <span className="text-[10px] ml-0.5 opacity-80">{item.unit || '個'}</span>
                                 </div>
                               </div>
                             </div>
@@ -468,7 +468,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                         <motion.div
                           key={item.id}
                           layout="position"
-                          className={`relative rounded-3xl overflow-hidden shadow-xl border transition-all ${
+                          className={`relative rounded-2xl overflow-hidden shadow-md border transition-all ${
                             item.status === 'completed' 
                               ? 'bg-gray-950/60 border-gray-900/50 opacity-40 grayscale' 
                               : 'bg-gray-900 border-gray-800/80 hover:border-gray-700/80'
@@ -482,7 +482,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                             </div>
                           )}
 
-                          <div className="relative z-10 p-4 sm:p-5 text-left">
+                          <div className="relative z-10 p-3 sm:p-3.5 text-left">
                             {editingId === item.id ? (
                               <div className="space-y-3">
                                 <div className="text-[10px] text-gray-500 font-black pl-1">商品情報を編集しています</div>
@@ -534,10 +534,10 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                   </select>
                                 </div>
                                 <div className="flex gap-2 pt-1.5">
-                                  <button onClick={saveEdit} className="flex-1 py-3 bg-blue-600 text-white rounded-xl flex items-center justify-center gap-1.5 font-black shadow-lg shadow-blue-500/10 text-xs">
-                                    <Save size={15} /> 反映する
+                                  <button onClick={saveEdit} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl flex items-center justify-center gap-1.5 font-black shadow-lg shadow-blue-500/10 text-xs">
+                                    <Save size={14} /> 反映する
                                   </button>
-                                  <button onClick={() => setEditingId(null)} className="flex-1 py-3 bg-gray-800 text-gray-400 rounded-xl font-bold text-xs">
+                                  <button onClick={() => setEditingId(null)} className="flex-1 py-2.5 bg-gray-800 text-gray-400 rounded-xl font-bold text-xs">
                                     キャンセル
                                   </button>
                                 </div>
@@ -545,8 +545,8 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                             ) : (
                               <div className="flex items-center justify-between gap-4">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
                                       item.status === 'completed' ? 'bg-gray-800 text-gray-500 border border-gray-700/30' : 'bg-blue-600 text-white'
                                     }`}>
                                       {item.status === 'completed' ? '完了' : '未対応'}
@@ -555,22 +555,22 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                     <span className="text-[10px] text-gray-500 ml-auto font-mono">{formatDate(item.createdAt)}</span>
                                   </div>
                                   
-                                  <h3 className={`text-sm sm:text-base font-black leading-snug mb-3.5 truncate ${item.status === 'completed' ? 'line-through text-gray-600' : 'text-gray-100'}`}>
+                                  <h3 className={`text-xs sm:text-sm font-black leading-tight mb-2 truncate ${item.status === 'completed' ? 'line-through text-gray-600' : 'text-gray-100'}`}>
                                     {item.productName}
                                   </h3>
                                   
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex-1 min-w-0 pr-1.5">
                                       {item.maker && (
-                                        <span className="inline-block px-2 py-1 bg-gray-800/80 text-gray-400 text-[10px] font-bold rounded-lg truncate max-w-full">
+                                        <span className="inline-block px-1.5 py-0.5 bg-gray-800/80 text-gray-400 text-[10px] font-medium rounded-md truncate max-w-full">
                                           {item.maker}
                                         </span>
                                       )}
                                     </div>
-                                    <div className="inline-block px-3 py-1.5 bg-gray-950 border border-gray-800 shadow-inner rounded-xl shrink-0">
-                                      <p className="text-lg font-black text-blue-400">
+                                    <div className="inline-block px-2.5 py-1 bg-gray-950 border border-gray-800 shadow-inner rounded-lg shrink-0">
+                                      <p className="text-sm font-black text-blue-400">
                                         {item.quantity}
-                                        <span className="text-xs ml-0.5 opacity-60 text-gray-400">{item.unit || '個'}</span>
+                                        <span className="text-[10px] ml-0.5 opacity-60 text-gray-400">{item.unit || '個'}</span>
                                       </p>
                                     </div>
                                   </div>
@@ -581,24 +581,24 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                   {/* Toggle completed button */}
                                   <button
                                     onClick={() => toggleStatus(item)}
-                                    className={`p-3.5 sm:p-4 rounded-2xl transition-all shadow-md ${
+                                    className={`p-2.5 sm:p-3 rounded-xl transition-all shadow-md ${
                                       item.status === 'completed' 
                                         ? 'bg-gray-800 text-gray-600 border border-gray-700/20' 
                                         : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/10 hover:scale-105 active:scale-95'
                                     }`}
                                     title={item.status === 'completed' ? '未完了に戻す' : '完了にする'}
                                   >
-                                    <Check size={20} strokeWidth={3} />
+                                    <Check size={16} strokeWidth={3} />
                                   </button>
 
                                   <div className="flex flex-col gap-1">
                                     {/* Inline Edit form launcher */}
                                     <button
                                       onClick={() => startEdit(item)}
-                                      className="p-2.5 text-gray-500 hover:text-white hover:bg-gray-800 rounded-xl transition-colors"
+                                      className="p-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-xl transition-colors"
                                       title="編集"
                                     >
-                                      <Edit2 size={15} />
+                                      <Edit2 size={13} />
                                     </button>
 
                                     {/* Safety Guard styled delete */}
@@ -611,14 +611,14 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                           setTimeout(() => setDeletingId(null), 3000);
                                         }
                                       }}
-                                      className={`p-2.5 transition-all rounded-xl ${
+                                      className={`p-2 transition-all rounded-xl ${
                                         deletingId === item.id 
                                           ? 'bg-red-600 text-white scale-110' 
                                           : 'text-gray-500 hover:text-red-400'
                                       }`}
                                       title="削除"
                                     >
-                                      {deletingId === item.id ? <Trash2 size={15} className="animate-pulse" /> : <Trash2 size={15} />}
+                                      {deletingId === item.id ? <Trash2 size={13} className="animate-pulse" /> : <Trash2 size={13} />}
                                     </button>
                                   </div>
                                 </div>
