@@ -161,7 +161,7 @@ export default function EditMode({ onBack }: EditModeProps) {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-50 pb-safe">
       <header className="p-4 bg-white border-b sticky top-0 z-10">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
@@ -241,7 +241,7 @@ export default function EditMode({ onBack }: EditModeProps) {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-4 space-y-4">
+      <main className="flex-1 overflow-y-auto p-4 pb-32 space-y-4">
         {activeTab === 'replenishment' ? (
           <>
             {items.map((item) => (

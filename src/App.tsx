@@ -3,17 +3,66 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppMode } from './types';
 import ModeSelector from './components/ModeSelector';
 import ScannerMode from './components/ScannerMode';
 import ViewMode from './components/ViewMode';
 import EditMode from './components/EditMode';
 import QuickMode from './components/QuickMode';
+import PasscodeLock from './components/PasscodeLock';
+import UsernameSetup from './components/UsernameSetup';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('menu');
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
+  const [username, setUsername] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const verified = localStorage.getItem('app_passcode_verified');
+    if (verified === 'true') {
+      setIsAuthorized(true);
+    }
+    const savedName = localStorage.getItem('app_username') || '';
+    setUsername(savedName);
+    setLoading(false);
+  }, []);
+
+  const handlePasscodeSuccess = () => {
+    localStorage.setItem('app_passcode_verified', 'true');
+    setIsAuthorized(true);
+  };
+
+  const handleLock = () => {
+    localStorage.removeItem('app_passcode_verified');
+    setIsAuthorized(false);
+    setMode('menu');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-blue-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
+    return <PasscodeLock onSuccess={handlePasscodeSuccess} />;
+  }
+
+  if (!username) {
+    return (
+      <UsernameSetup
+        onSuccess={(name) => {
+          localStorage.setItem('app_username', name);
+          setUsername(name);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white font-sans antialiased text-gray-900 overflow-x-hidden">
@@ -25,7 +74,15 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <ModeSelector onSelect={setMode} />
+            <ModeSelector
+              onSelect={setMode}
+              onLock={handleLock}
+              username={username}
+              onChangeUsername={(name) => {
+                localStorage.setItem('app_username', name);
+                setUsername(name);
+              }}
+            />
           </motion.div>
         )}
 

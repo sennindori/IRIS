@@ -131,7 +131,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
   }
 
   return (
-    <div className="flex flex-col h-screen max-h-screen bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden pb-safe">
       <header className="p-4 bg-white border-b shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
@@ -164,7 +164,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pb-20">
+            <div className="flex-1 overflow-y-auto space-y-2 pb-32">
               {isLoading ? (
                 <div className="py-20 flex flex-col items-center gap-2 text-gray-400">
                   <Loader2 className="animate-spin" />
@@ -195,7 +195,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
             </div>
           </div>
         ) : (
-          <div className="flex-1 p-6 flex flex-col items-center justify-center gap-8">
+          <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-start sm:justify-center gap-6 sm:gap-8 pb-16 pt-4">
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}

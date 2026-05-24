@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check } from 'lucide-react';
+import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppMode } from '../types';
 
 interface ModeSelectorProps {
   onSelect: (mode: AppMode) => void;
+  onLock: () => void;
+  username: string;
+  onChangeUsername: (username: string) => void;
 }
 
-export default function ModeSelector({ onSelect }: ModeSelectorProps) {
+export default function ModeSelector({ onSelect, onLock, username, onChangeUsername }: ModeSelectorProps) {
   const [showQrModal, setShowQrModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -22,12 +25,43 @@ export default function ModeSelector({ onSelect }: ModeSelectorProps) {
 
   return (
     <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-4 pb-6 bg-gray-50 overflow-hidden">
-      <header className="py-4 sm:py-6 md:py-8 text-center shrink-0">
-        <h1 className="text-4xl sm:text-5xl font-black text-blue-600 tracking-tighter">I.R.I.S</h1>
-        <p className="text-[10px] sm:text-[11px] text-gray-400 font-medium uppercase mt-1.5 sm:mt-2 tracking-[0.25em] leading-none font-condensed">
-          Inventory Replenishment Information System
-        </p>
+      <header className="py-4 sm:py-6 md:py-8 shrink-0 relative flex items-center justify-between max-w-lg mx-auto w-full">
+        {/* Blank placeholder for header balance */}
+        <div className="w-10 h-10 invisible" />
+        <div className="text-center">
+          <h1 className="text-4xl sm:text-5xl font-black text-blue-600 tracking-tighter">I.R.I.S</h1>
+          <p className="text-[10px] sm:text-[11px] text-gray-400 font-medium uppercase mt-1.5 sm:mt-2 tracking-[0.25em] leading-none font-condensed">
+            Inventory Replenishment Information System
+          </p>
+        </div>
+        {/* Device Lock Button */}
+        <button
+          onClick={onLock}
+          className="w-10 h-10 bg-white hover:bg-gray-100 text-gray-400 hover:text-red-500 rounded-2xl flex items-center justify-center transition-all shadow-md shadow-gray-200/50 border border-gray-100 active:scale-90"
+          title="アプリをロックする"
+        >
+          <Lock size={18} />
+        </button>
       </header>
+
+      {/* User Session Bar */}
+      <div className="max-w-lg mx-auto w-full mb-3 px-1.5 flex items-center justify-between shrink-0 bg-white/50 border border-gray-100 p-2.5 rounded-2xl shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 font-extrabold flex items-center justify-center text-xs shadow-sm">
+            {username.charAt(0)}
+          </div>
+          <div className="text-left">
+            <p className="text-[9px] text-gray-400 font-bold leading-none uppercase tracking-wider">操作担当者</p>
+            <p className="text-sm font-black text-gray-800 mt-0.5 leading-none">{username}</p>
+          </div>
+        </div>
+        <button
+          onClick={() => onChangeUsername('')}
+          className="text-xs font-bold text-blue-600 hover:text-blue-500 bg-white border border-gray-100 py-1 px-3 rounded-xl transition-all shadow-sm active:scale-95"
+        >
+          名前変更
+        </button>
+      </div>
 
       <div className="flex-1 flex flex-col gap-2.5 sm:gap-3 max-w-lg mx-auto w-full overflow-y-auto pb-3">
         {modes.map((mode) => (

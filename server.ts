@@ -40,8 +40,19 @@ async function startServer() {
           productName = rawName.substring(spaceMatch.index + 1).trim();
         }
 
+        // Clean product name from multiplier expressions like "×[number][unit]" (e.g. ×24, ×24本, x12)
+        const cleanProductName = (name: string): string => {
+          if (!name) return "";
+          let cleaned = name;
+          // Match bracketed multiplier first: (×24), （×24本）, [×24], etc.
+          cleaned = cleaned.replace(/[\s　]*[\[\(（][\s　]*[xX×✕✖][\s　]*[0-9０-９]+(?:[a-zA-Z本個コ袋缶つケースパックセット入り数ロール枚足組箱]*)[\]\)）]/gi, "");
+          // Match standard multiplier: ×24, × 24本, x12, etc.
+          cleaned = cleaned.replace(/[\s　]*[xX×✕✖][\s　]*[0-9０-９]+(?:[a-zA-Z本個コ袋缶つケースパックセット入り数ロール枚足組箱]*)/gi, "");
+          return cleaned.trim();
+        };
+
         res.json({
-          productName: productName,
+          productName: cleanProductName(productName),
           imageUrl: item.image?.medium,
           maker: maker,
         });

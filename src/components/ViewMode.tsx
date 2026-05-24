@@ -48,7 +48,7 @@ export default function ViewMode({ onBack }: ViewModeProps) {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-white">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-950 text-white pb-safe">
       <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
       
       <header className="p-6 bg-gray-900 border-b border-gray-800 flex items-center justify-between sticky top-0 z-10 shadow-xl">
@@ -67,7 +67,7 @@ export default function ViewMode({ onBack }: ViewModeProps) {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8">
+      <main className="flex-1 overflow-y-auto p-4 pb-32 md:p-8 md:pb-36">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500">
             <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-4"></div>
