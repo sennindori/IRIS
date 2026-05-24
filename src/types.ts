@@ -12,4 +12,24 @@ export interface ReplenishmentItem {
   createdAt: any; // Firestore Timestamp
 }
 
-export type AppMode = 'menu' | 'scan' | 'view' | 'edit' | 'quick';
+export type AppMode = 'menu' | 'scan' | 'view' | 'edit' | 'quick' | 'bbs';
+
+export interface BbsReply {
+  id: string;
+  author: string;
+  content: string;
+  createdAt: any; // Firestore Timestamp
+}
+
+export interface BbsMessage {
+  id: string;
+  author: string;
+  content: string;
+  category: 'notice' | 'handover' | 'chat' | 'urgent';
+  createdAt: any; // Firestore Timestamp
+  likesCount: number;
+  likedBy: string[]; // List of names who liked this post
+  replyCount?: number;
+  readBy?: string[]; // List of names who read this post
+}
+

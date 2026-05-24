@@ -7,18 +7,21 @@ import React, { useState, useEffect } from 'react';
 import { AppMode } from './types';
 import ModeSelector from './components/ModeSelector';
 import ScannerMode from './components/ScannerMode';
-import ViewMode from './components/ViewMode';
-import EditMode from './components/EditMode';
+import ViewEditMode from './components/ViewEditMode';
 import QuickMode from './components/QuickMode';
 import PasscodeLock from './components/PasscodeLock';
 import UsernameSetup from './components/UsernameSetup';
+import BBSMode from './components/BBSMode';
 import { motion, AnimatePresence } from 'motion/react';
+import { collection, query, onSnapshot } from 'firebase/firestore';
+import { db } from './lib/firebase';
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('menu');
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [username, setUsername] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
+  const [unreadBbsCount, setUnreadBbsCount] = useState<number>(0);
 
   useEffect(() => {
     const verified = localStorage.getItem('app_passcode_verified');
@@ -29,6 +32,34 @@ export default function App() {
     setUsername(savedName);
     setLoading(false);
   }, []);
+
+  // Real-time tracking of unread BBS posts for badge
+  useEffect(() => {
+    if (!username) {
+      setUnreadBbsCount(0);
+      return;
+    }
+
+    const q = query(collection(db, 'bbs_messages'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let count = 0;
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const readBy = data.readBy || [];
+        const isAuthor = data.author === username;
+        const isRead = readBy.includes(username);
+        
+        if (!isAuthor && !isRead) {
+          count++;
+        }
+      });
+      setUnreadBbsCount(count);
+    }, (error) => {
+      console.error('BBS unread count subscription failed:', error);
+    });
+
+    return () => unsubscribe();
+  }, [username]);
 
   const handlePasscodeSuccess = () => {
     localStorage.setItem('app_passcode_verified', 'true');
@@ -78,6 +109,7 @@ export default function App() {
               onSelect={setMode}
               onLock={handleLock}
               username={username}
+              unreadBbsCount={unreadBbsCount}
               onChangeUsername={(name) => {
                 localStorage.setItem('app_username', name);
                 setUsername(name);
@@ -102,24 +134,24 @@ export default function App() {
         {mode === 'view' && (
           <motion.div
             key="view"
-            initial={{ opacity: 0, scale: 1.1 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-gray-950"
           >
-            <ViewMode onBack={() => setMode('menu')} />
+            <ViewEditMode initialTab="view" onBack={() => setMode('menu')} />
           </motion.div>
         )}
 
         {mode === 'edit' && (
           <motion.div
             key="edit"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="fixed inset-0 z-50 bg-gray-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-gray-950"
           >
-            <EditMode onBack={() => setMode('menu')} />
+            <ViewEditMode initialTab="edit" onBack={() => setMode('menu')} />
           </motion.div>
         )}
 
@@ -133,6 +165,18 @@ export default function App() {
             className="fixed inset-0 z-50 bg-gray-50"
           >
             <QuickMode onBack={() => setMode('menu')} />
+          </motion.div>
+        )}
+
+        {mode === 'bbs' && (
+          <motion.div
+            key="bbs"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed inset-0 z-50 bg-gray-50"
+          >
+            <BBSMode onBack={() => setMode('menu')} username={username} />
           </motion.div>
         )}
       </AnimatePresence>

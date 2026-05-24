@@ -17,12 +17,45 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "When the request was created." }
       },
       "required": ["janCode", "productName", "quantity", "status", "createdAt"]
+    },
+    "BbsMessage": {
+      "title": "BBS Message",
+      "description": "Represents a post on the workplace bulletin board for co-workers.",
+      "type": "object",
+      "properties": {
+        "author": { "type": "string", "description": "The name of the colleague." },
+        "content": { "type": "string", "description": "The description/body of the post." },
+        "category": { "type": "string", "enum": ["notice", "handover", "chat", "urgent"], "description": "The post category tag." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp." },
+        "likesCount": { "type": "integer", "description": "Total count of thumbs-up reactions." },
+        "likedBy": { "type": "array", "description": "List of user names who reacted to the post to avoid dupes." }
+      },
+      "required": ["author", "content", "category", "createdAt"]
+    },
+    "BbsReply": {
+      "title": "BBS Message Reply",
+      "description": "Represents a comment / reply under a specific BBS post.",
+      "type": "object",
+      "properties": {
+        "author": { "type": "string", "description": "Name of the colleague who replied to the post." },
+        "content": { "type": "string", "description": "The content of the reply." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the reply was sent." }
+      },
+      "required": ["author", "content", "createdAt"]
     }
   },
   "firestore": {
     "/replenishment_list/{itemId}": {
       "schema": "ReplenishmentItem",
       "description": "Collection of all replenishment requests."
+    },
+    "/bbs_messages/{messageId}": {
+      "schema": "BbsMessage",
+      "description": "Collection of all bulletin board system posts."
+    },
+    "/bbs_messages/{messageId}/replies/{replyId}": {
+      "schema": "BbsReply",
+      "description": "Subcollection of replies on a particular post."
     }
   }
 }

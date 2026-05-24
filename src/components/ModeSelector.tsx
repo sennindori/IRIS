@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check, Lock } from 'lucide-react';
+import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check, Lock, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppMode } from '../types';
 
@@ -8,19 +8,48 @@ interface ModeSelectorProps {
   onLock: () => void;
   username: string;
   onChangeUsername: (username: string) => void;
+  unreadBbsCount?: number;
 }
 
-export default function ModeSelector({ onSelect, onLock, username, onChangeUsername }: ModeSelectorProps) {
+export default function ModeSelector({ onSelect, onLock, username, onChangeUsername, unreadBbsCount = 0 }: ModeSelectorProps) {
   const [showQrModal, setShowQrModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const appUrl = typeof window !== 'undefined' ? window.location.href : '';
 
   const modes = [
-    { id: 'scan' as AppMode, label: 'スキャン', icon: Scan, color: 'bg-blue-600', desc: '依頼入力' },
-    { id: 'quick' as AppMode, label: '定番商品', icon: LayoutGrid, color: 'bg-amber-500', desc: 'リストから選択' },
-    { id: 'view' as AppMode, label: '閲覧', icon: Eye, color: 'bg-green-600', desc: '状況確認' },
-    { id: 'edit' as AppMode, label: '編集', icon: Edit3, color: 'bg-orange-600', desc: '完了・修正' },
+    { 
+      id: 'scan' as AppMode, 
+      label: 'スキャン', 
+      icon: Scan, 
+      color: 'bg-red-50 text-red-500 border border-red-100/70', 
+      hoverBg: 'hover:bg-red-50/20 hover:border-red-100',
+      desc: '依頼入力' 
+    },
+    { 
+      id: 'quick' as AppMode, 
+      label: '定番商品', 
+      icon: LayoutGrid, 
+      color: 'bg-orange-50 text-orange-500 border border-orange-100/70', 
+      hoverBg: 'hover:bg-orange-50/20 hover:border-orange-100',
+      desc: 'リストから選択' 
+    },
+    { 
+      id: 'view' as AppMode, 
+      label: '補充確認', 
+      icon: Eye, 
+      color: 'bg-blue-50 text-blue-500 border border-blue-100/70', 
+      hoverBg: 'hover:bg-blue-50/20 hover:border-blue-100',
+      desc: '状況確認・リスト編集' 
+    },
+    { 
+      id: 'bbs' as AppMode, 
+      label: '掲示板', 
+      icon: MessageSquare, 
+      color: 'bg-emerald-50 text-emerald-500 border border-emerald-100/70', 
+      hoverBg: 'hover:bg-emerald-50/20 hover:border-emerald-100',
+      desc: '同僚への連絡・引継ぎ' 
+    },
   ];
 
   return (
@@ -64,24 +93,40 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
       </div>
 
       <div className="flex-1 flex flex-col gap-2.5 sm:gap-3 max-w-lg mx-auto w-full overflow-y-auto pb-3">
-        {modes.map((mode) => (
-          <motion.button
-            key={mode.id}
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            onClick={() => onSelect(mode.id)}
-            className="flex-1 flex items-center p-4 sm:p-6 bg-white rounded-[24px] sm:rounded-[32px] shadow-lg shadow-gray-200/50 border border-white transition-all active:shadow-none min-h-[76px] sm:min-h-[90px]"
-            id={`mode-btn-${mode.id}`}
-          >
-            <div className={`${mode.color} p-3 sm:p-4 rounded-xl sm:rounded-2xl text-white mr-4 sm:mr-6 shrink-0`}>
-              <mode.icon size={24} className="sm:w-7 sm:h-7" />
-            </div>
-            <div className="text-left">
-              <h2 className="text-lg sm:text-xl font-black text-gray-900 leading-tight">{mode.label}</h2>
-              <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">{mode.desc}</p>
-            </div>
-          </motion.button>
-        ))}
+        {modes.map((mode) => {
+          const hasUnreadBbs = mode.id === 'bbs' && unreadBbsCount > 0;
+          return (
+            <motion.button
+              key={mode.id}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              onClick={() => onSelect(mode.id)}
+              className={`flex-1 flex items-center p-4 sm:p-6 bg-white rounded-[24px] sm:rounded-[32px] shadow-lg shadow-gray-200/50 border border-white hover:shadow-xl transition-all active:shadow-none min-h-[76px] sm:min-h-[90px] relative cursor-pointer ${mode.hoverBg}`}
+              id={`mode-btn-${mode.id}`}
+            >
+              <div className={`${mode.color} p-3 sm:p-4 rounded-xl sm:rounded-2xl mr-4 sm:mr-6 shrink-0 relative flex items-center justify-center`}>
+                <mode.icon size={24} className="sm:w-7 sm:h-7" />
+                {hasUnreadBbs && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white"></span>
+                  </span>
+                )}
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-black text-gray-900 leading-tight">{mode.label}</h2>
+                  {hasUnreadBbs && (
+                    <span className="bg-emerald-500 text-white text-[10px] sm:text-xs font-black min-w-[20px] h-5 px-2 rounded-full flex items-center justify-center shrink-0">
+                      {unreadBbsCount}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">{mode.desc}</p>
+              </div>
+            </motion.button>
+          );
+        })}
       </div>
 
       <footer className="mt-auto pt-3 pb-safe border-t border-gray-100 flex items-center justify-between max-w-lg mx-auto w-full shrink-0">
@@ -126,9 +171,19 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
               className="relative w-full max-w-sm bg-white rounded-[40px] p-8 shadow-2xl border border-gray-100 z-10 text-center"
             >
               <h3 className="text-2xl font-black text-gray-900 leading-tight tracking-tight mb-2">スマホと連携</h3>
-              <p className="text-xs text-gray-400 font-medium px-4 mb-6 leading-relaxed">
+              <p className="text-xs text-gray-400 font-medium px-4 mb-4 leading-relaxed">
                 カメラで下のコードをスキャンすると、スマートフォンなどの他の端末で表示・操作が可能です。
               </p>
+
+              <div className="bg-blue-50/80 border border-blue-100/50 rounded-2xl p-3 mb-5 text-left text-xs">
+                <p className="font-black text-blue-900 flex items-center gap-1 mb-1">
+                  💡 ログイン案内
+                </p>
+                <ul className="text-[11px] text-blue-800 font-bold space-y-1 list-disc pl-4 leading-snug">
+                  <li>パスコード： <span className="text-blue-600 font-extrabold text-xs">3120</span></li>
+                  <li>初回ログイン時に判別しやすい名前をつけてください。</li>
+                </ul>
+              </div>
 
               <div className="relative mx-auto w-56 h-56 bg-gray-50 border-4 border-white shadow-xl rounded-[32px] overflow-hidden flex items-center justify-center p-4 mb-6">
                 <img
