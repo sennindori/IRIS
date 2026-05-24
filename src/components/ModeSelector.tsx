@@ -135,7 +135,7 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
             <QrCode size={20} />
           </div>
           <div className="text-left">
-            <p className="text-xs font-black text-gray-900 leading-none">スマホでスキャン</p>
+            <p className="text-xs font-black text-gray-900 leading-none">I.R.I.Sを紹介</p>
             <p className="text-[10px] text-gray-400 font-medium mt-1">カメラで読み取ってスマホで操作</p>
           </div>
         </div>
