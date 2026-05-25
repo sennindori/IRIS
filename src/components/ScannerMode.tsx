@@ -14,6 +14,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   const [productInfo, setProductInfo] = useState<{ productName: string; imageUrl?: string; maker?: string } | null>(null);
   const [quantity, setQuantity] = useState('1');
   const [unit, setUnit] = useState('個');
+  const [subcategory, setSubcategory] = useState('通常');
   const [manualCode, setManualCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -241,6 +242,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         imageUrl: productInfo.imageUrl || null,
         quantity: quantity.trim(),
         unit: unit,
+        subcategory: subcategory,
         status: 'pending',
         createdAt: serverTimestamp(),
       });
@@ -282,6 +284,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     setManualCode('');
     setQuantity('1');
     setUnit('個');
+    setSubcategory('通常');
     if (scannerRef.current && scannerRef.current.isScanning) {
       scannerRef.current.resume();
     }
@@ -512,6 +515,24 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                         </button>
                       ))}
                     </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 text-left">
+                  <label className="block text-sm font-bold text-gray-700 mb-1 pl-1">売場 (サブカテゴリ)</label>
+                  <div className="flex bg-gray-100 p-1.5 rounded-2xl gap-1">
+                    {['通常', '催事', 'エンド', 'その他'].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setSubcategory(s)}
+                        type="button"
+                        className={`flex-1 py-2 font-black rounded-xl transition-all ${
+                          subcategory === s ? 'bg-white text-blue-600 shadow-sm scale-[1.02]' : 'text-gray-400'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
                   </div>
                 </div>
 

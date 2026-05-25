@@ -16,6 +16,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState('ケース');
+  const [subcategory, setSubcategory] = useState('通常');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -59,6 +60,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
         maker: selectedItem.maker,
         quantity: String(quantity),
         unit: unit,
+        subcategory: subcategory,
         imageUrl: null,
         status: 'pending',
         createdAt: serverTimestamp(),
@@ -69,6 +71,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
         setSelectedItem(null);
         setSearch('');
         setQuantity(1);
+        setSubcategory('通常');
       }, 1500);
     } catch (err) {
       console.error(err);
@@ -249,6 +252,23 @@ export default function QuickMode({ onBack }: QuickModeProps) {
                       {u}
                     </button>
                   ))}
+                </div>
+
+                <div className="space-y-1.5 text-left">
+                  <span className="text-[11px] font-black text-gray-400 pl-1">売場 (サブカテゴリ)</span>
+                  <div className="flex bg-gray-100 p-1 rounded-2xl gap-1">
+                    {['通常', '催事', 'エンド', 'その他'].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setSubcategory(s)}
+                        className={`flex-1 py-2 text-xs font-black rounded-[10px] transition-all ${
+                          subcategory === s ? 'bg-white text-blue-600 shadow-md scale-[1.02]' : 'text-gray-400'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </motion.div>

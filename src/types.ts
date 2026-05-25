@@ -11,6 +11,7 @@ export interface ReplenishmentItem {
   imageUrl?: string;
   createdAt: any; // Firestore Timestamp
   fulfilledQuantity?: number; // 対応数 (実績値)
+  subcategory?: string; // サブカテゴリ (売場 - 通常, 催事, エンド, その他)
 }
 
 export type AppMode = 'menu' | 'scan' | 'view' | 'edit' | 'quick' | 'bbs';

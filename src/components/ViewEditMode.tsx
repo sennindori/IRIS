@@ -50,7 +50,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
 
   // Editing state
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState({ productName: '', maker: '', quantity: '', unit: '', fulfilledQuantity: 0 });
+  const [editValue, setEditValue] = useState({ productName: '', maker: '', quantity: '', unit: '', fulfilledQuantity: 0, subcategory: '通常' });
   const [deletingId, setDeletingId] = useState<string | null>(null);
   
   // Clear modal/dropdown handles
@@ -233,14 +233,15 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
       maker: item.maker || '',
       quantity: item.quantity,
       unit: item.unit || '個',
-      fulfilledQuantity: item.fulfilledQuantity || 0
+      fulfilledQuantity: item.fulfilledQuantity || 0,
+      subcategory: item.subcategory || '通常'
     });
   }
 
   // Persist inline edits to Firestore
   async function saveEdit() {
     if (!editingId) return;
-    const { productName, maker, quantity, unit, fulfilledQuantity } = editValue;
+    const { productName, maker, quantity, unit, fulfilledQuantity, subcategory } = editValue;
     
     try {
       if (!productName.trim() || !quantity.trim()) {
@@ -264,6 +265,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
         quantity: quantity.trim(),
         unit: unit || '個',
         fulfilledQuantity: fulfilledQuantity,
+        subcategory: subcategory || '通常',
         status: newStatus
       });
       setEditingId(null);
@@ -506,10 +508,18 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                               <div className="flex items-end justify-between gap-2.5">
                                 <div className="flex-1 min-w-0">
                                   {item.maker && (
-                                    <span className="inline-block mb-1 px-1.5 py-0.5 bg-white/10 backdrop-blur-md text-white text-[9px] font-black rounded-md border border-white/25 uppercase tracking-wider truncate max-w-full">
+                                    <span className="inline-block mb-1 mr-1 px-1.5 py-0.5 bg-white/10 backdrop-blur-md text-white text-[9px] font-black rounded-md border border-white/25 uppercase tracking-wider truncate max-w-full">
                                       {item.maker}
                                     </span>
                                   )}
+                                  <span className={`inline-block mb-1 px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full ${
+                                    item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                                    item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
+                                    item.subcategory === 'その他' ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/60' :
+                                    'bg-blue-500/20 text-blue-350 border-blue-500/30'
+                                  }`}>
+                                    {item.subcategory || '通常'}
+                                  </span>
                                   {/* リアルタイム補充進捗 */}
                                   <div className="text-[10px] font-bold text-emerald-400 drop-shadow flex items-center gap-1.5 mt-0.5">
                                     <span>対応: {item.fulfilledQuantity || 0}</span>
@@ -664,6 +674,27 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                     </select>
                                   </div>
                                 </div>
+
+                                <div>
+                                  <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">売場サブカテゴリ</label>
+                                  <div className="flex bg-gray-950 border border-gray-850 p-1 rounded-xl gap-1">
+                                    {['通常', '催事', 'エンド', 'その他'].map((s) => (
+                                      <button
+                                        key={s}
+                                        type="button"
+                                        onClick={() => setEditValue({ ...editValue, subcategory: s })}
+                                        className={`flex-1 py-1.5 text-[11px] font-black rounded-lg transition-all ${
+                                          editValue.subcategory === s 
+                                            ? 'bg-blue-600 text-white' 
+                                            : 'text-gray-500 hover:text-gray-300'
+                                        }`}
+                                      >
+                                        {s}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
                                 <div className="flex gap-2 pt-1.5">
                                   <button onClick={saveEdit} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl flex items-center justify-center gap-1.5 font-black shadow-lg shadow-blue-500/10 text-xs">
                                     <Save size={14} /> 反映する
@@ -693,10 +724,18 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                   <div className="flex flex-wrap items-center justify-between gap-3 mt-1.5 pt-2 border-t border-gray-800/40">
                                     <div className="flex-1 min-w-0">
                                       {item.maker && (
-                                        <span className="inline-block px-1.5 py-0.5 bg-gray-800/80 text-gray-400 text-[9px] font-medium rounded-md truncate max-w-full mb-1">
+                                        <span className="inline-block px-1.5 py-0.5 bg-gray-800/80 text-gray-400 text-[9px] font-medium rounded-md truncate max-w-full mb-1 mr-1">
                                           {item.maker}
                                         </span>
                                       )}
+                                      <span className={`inline-block px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full mb-1 ${
+                                        item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                                        item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
+                                        item.subcategory === 'その他' ? 'bg-zinc-800/85 text-zinc-400 border-zinc-700' :
+                                        'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                      }`}>
+                                        {item.subcategory || '通常'}
+                                      </span>
                                       
                                       {/* リアルタイム補充状況 (対応数/依頼数、残数) */}
                                       <div className="text-xs font-bold text-gray-400 flex flex-col gap-0.5 justify-center">
