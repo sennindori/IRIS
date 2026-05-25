@@ -22,6 +22,9 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   const [errorHeader, setErrorHeader] = useState<string | null>(null);
   const [showTenkey, setShowTenkey] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
+  const [isPermissionGranted, setIsPermissionGranted] = useState(() => {
+    return localStorage.getItem('iris_camera_granted') === 'true';
+  });
   
   // States for live scan candidate when typing 13/14 digits in tenkey
   const [candidateProduct, setCandidateProduct] = useState<{ productName: string; imageUrl?: string; maker?: string } | null>(null);
@@ -134,6 +137,8 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   const containerId = "reader";
 
   useEffect(() => {
+    if (!isPermissionGranted) return;
+
     const startScanner = async () => {
       try {
         scannerRef.current = new Html5Qrcode(containerId);
@@ -161,9 +166,14 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
           onScanSuccess,
           onScanFailure
         );
+        // カメラ起動が完全に成功したら、フラグを永続化
+        localStorage.setItem('iris_camera_granted', 'true');
       } catch (err: any) {
         console.error("Scanner Error:", err);
         setErrorHeader("カメラの起動に失敗しました。権限と環境を確認してください。");
+        // エラー時にはフラグをリセットして許可モーダルが再試行されるようにする
+        localStorage.setItem('iris_camera_granted', 'false');
+        setIsPermissionGranted(false);
       }
     };
 
@@ -178,7 +188,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         }).catch(err => console.error("Failed to stop scanner", err));
       }
     };
-  }, []);
+  }, [isPermissionGranted]);
 
   function onScanSuccess(decodedText: string) {
     if (scannedCode) return; 
@@ -312,7 +322,41 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
 
       {/* Main Scanner Area */}
       <div className="absolute inset-0 z-0">
-        {errorHeader ? (
+        {!isPermissionGranted ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-gray-950 text-white z-20">
+            <div className="relative mb-6">
+              {/* Pulse scanning effect decoration */}
+              <div className="absolute inset-0 bg-blue-500/15 rounded-full blur-xl animate-pulse scale-150" />
+              <div className="relative w-24 h-24 bg-gray-900 border border-gray-800 rounded-full flex items-center justify-center text-blue-400 shadow-2xl">
+                <Scan size={44} className="animate-pulse" style={{ animationDuration: '3s' }} />
+              </div>
+            </div>
+            
+            <div className="max-w-xs text-center mb-8">
+              <h3 className="text-lg font-black tracking-wider text-gray-100 mb-2 font-mono">
+                CAMERA ACTIVATION
+              </h3>
+              <p className="text-xs font-medium text-gray-400 leading-relaxed">
+                商品のバーコードをスキャンするためにカメラを使用します。スキャンを開始しますか？
+              </p>
+            </div>
+
+            <button
+              onClick={() => setIsPermissionGranted(true)}
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black rounded-2xl shadow-lg shadow-blue-500/20 active:scale-95 transition-all text-sm tracking-widest flex items-center gap-2"
+            >
+              <CheckCircle2 size={16} />
+              スキャンを開始する
+            </button>
+            
+            <button
+              onClick={onBack}
+              className="mt-4 px-6 py-2 text-xs font-bold text-gray-500 hover:text-white transition-colors"
+            >
+              ダッシュボードに戻る
+            </button>
+          </div>
+        ) : errorHeader ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-gray-950 text-white z-10">
             <AlertCircle size={48} className="text-red-500 mb-4" />
             <h2 className="text-xl font-bold mb-2">起動エラー</h2>
@@ -329,7 +373,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         )}
         
         {/* Invisible scanner area */}
-        {!scannedCode && !errorHeader && (
+        {!scannedCode && !errorHeader && isPermissionGranted && (
           <>
             <div className="absolute inset-0 pointer-events-none z-10">
               {/* No visible guides as requested */}
