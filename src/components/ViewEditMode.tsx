@@ -57,6 +57,10 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
   const [isClearingAll, setIsClearingAll] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+  // Bulk complete states
+  const [isCompletingAll, setIsCompletingAll] = useState(false);
+  const [showBulkCompleteConfirm, setShowBulkCompleteConfirm] = useState(false);
+
   // Search filter for requested list items section
   const [listSearchQuery, setListSearchQuery] = useState('');
 
@@ -159,6 +163,33 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
     }
   }
 
+  // 一括で補充済みにする（未完了のものを完了ステータスに変更）
+  async function bulkCompleteAll() {
+    setIsCompletingAll(true);
+    try {
+      const pendingItems = items.filter(item => item.status === 'pending');
+      if (pendingItems.length === 0) {
+        alert("未対応の補充依頼はありません");
+        setShowBulkCompleteConfirm(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      pendingItems.forEach((item) => {
+        const docRef = doc(db, 'replenishment_list', item.id);
+        batch.update(docRef, { status: 'completed' });
+      });
+
+      await batch.commit();
+      setShowBulkCompleteConfirm(false);
+    } catch (err) {
+      console.error("Bulk complete operation failed", err);
+      alert("一括完了に失敗しました");
+    } finally {
+      setIsCompletingAll(false);
+    }
+  }
+
   // Start inline edit context for active request
   function startEdit(item: ReplenishmentItem) {
     setEditingId(item.id);
@@ -249,57 +280,70 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
 
           {/* Contextual batch actions (Edit tab only) */}
           {activeTab === 'edit' && (
-            <div className="relative">
-              <button
-                onClick={() => setShowClearConfirm(!showClearConfirm)}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                  showClearConfirm 
-                    ? 'bg-red-600 text-white shadow-lg shadow-red-500/20' 
-                    : 'bg-gray-800 hover:bg-red-950/20 text-gray-400 hover:text-red-400'
-                }`}
-                title="一括操作"
-              >
-                <Trash2 size={18} />
-              </button>
-              
-              <AnimatePresence>
-                {showClearConfirm && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-2.5 w-52 bg-gray-900 rounded-2xl shadow-2xl border border-gray-800/80 p-2 z-30"
-                  >
-                    <p className="text-[9px] text-gray-500 font-black px-3 py-1.5 uppercase tracking-wider">一括削除メニュー</p>
-                    
-                    <button
-                      onClick={() => clearAll(true)}
-                      disabled={isClearingAll}
-                      className="w-full text-left px-3 py-2.5 hover:bg-gray-800 text-gray-300 rounded-xl text-xs font-black flex items-center justify-between"
+            <div className="flex items-center gap-2">
+              {items.some(item => item.status === 'pending') && (
+                <button
+                  onClick={() => setShowBulkCompleteConfirm(true)}
+                  className="h-10 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/25 rounded-xl flex items-center gap-1.5 text-xs font-black transition-all active:scale-95"
+                  title="一括補充完了"
+                >
+                  <Check size={14} strokeWidth={2.5} />
+                  一括完了
+                </button>
+              )}
+
+              <div className="relative">
+                <button
+                  onClick={() => setShowClearConfirm(!showClearConfirm)}
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                    showClearConfirm 
+                      ? 'bg-red-600 text-white shadow-lg shadow-red-500/20' 
+                      : 'bg-gray-800 hover:bg-red-950/20 text-gray-400 hover:text-red-400'
+                  }`}
+                  title="一括操作"
+                >
+                  <Trash2 size={18} />
+                </button>
+                
+                <AnimatePresence>
+                  {showClearConfirm && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute right-0 mt-2.5 w-52 bg-gray-900 rounded-2xl shadow-2xl border border-gray-800/80 p-2 z-30"
                     >
-                      完了分のみ全削除
-                      <Check size={13} className="text-emerald-500" />
-                    </button>
-                    
-                    <button
-                      onClick={() => clearAll(false)}
-                      disabled={isClearingAll}
-                      className="w-full text-left px-3 py-2.5 hover:bg-red-950/30 text-red-400 rounded-xl text-xs font-black flex items-center justify-between"
-                    >
-                      すべて強制削除
-                      <Trash2 size={13} />
-                    </button>
-                    
-                    <div className="h-px bg-gray-800 my-1"></div>
-                    <button
-                      onClick={() => setShowClearConfirm(false)}
-                      className="w-full text-center py-2 text-gray-500 text-[10px] font-bold hover:text-gray-300"
-                    >
-                      閉じる
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                      <p className="text-[9px] text-gray-500 font-black px-3 py-1.5 uppercase tracking-wider">一括削除メニュー</p>
+                      
+                      <button
+                        onClick={() => clearAll(true)}
+                        disabled={isClearingAll}
+                        className="w-full text-left px-3 py-2.5 hover:bg-gray-800 text-gray-300 rounded-xl text-xs font-black flex items-center justify-between"
+                      >
+                        完了分のみ全削除
+                        <Check size={13} className="text-emerald-500" />
+                      </button>
+                      
+                      <button
+                        onClick={() => clearAll(false)}
+                        disabled={isClearingAll}
+                        className="w-full text-left px-3 py-2.5 hover:bg-red-950/30 text-red-400 rounded-xl text-xs font-black flex items-center justify-between"
+                      >
+                        すべて強制削除
+                        <Trash2 size={13} />
+                      </button>
+                      
+                      <div className="h-px bg-gray-800 my-1"></div>
+                      <button
+                        onClick={() => setShowClearConfirm(false)}
+                        className="w-full text-center py-2 text-gray-500 text-[10px] font-bold hover:text-gray-300"
+                      >
+                        閉じる
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           )}
         </div>
@@ -455,6 +499,19 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                     </button>
                   )}
                 </div>
+
+                {items.some(item => item.status === 'pending') && (
+                  <motion.button
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onClick={() => setShowBulkCompleteConfirm(true)}
+                    className="w-full py-3 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 rounded-2xl flex items-center justify-center gap-2 text-xs font-black transition-all active:scale-[0.99] shadow-sm select-none"
+                    id="bulk-complete-btn"
+                  >
+                    <Check size={14} strokeWidth={2.5} />
+                    未完了の全 {items.filter(i => i.status === 'pending').length} 件を一括で補充済みにする
+                  </motion.button>
+                )}
 
                 {filteredReplenishmentList.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 bg-gray-900/20 rounded-3xl border border-gray-800/40 text-gray-500">
@@ -635,6 +692,58 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
           </>
         )}
       </main>
+
+      {/* 一括完了確認モーダル */}
+      <AnimatePresence>
+        {showBulkCompleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop with elegant blur */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isCompletingAll && setShowBulkCompleteConfirm(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+            />
+            
+            {/* Modal Body */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: 'spring', duration: 0.4 }}
+              className="relative w-full max-w-sm bg-gray-900 border border-gray-800/80 rounded-3xl p-6 shadow-2xl z-10 text-center"
+            >
+              <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
+                <Check size={24} strokeWidth={3} />
+              </div>
+              
+              <h3 className="text-base font-black text-white mb-2">一括で補充済みにしますか？</h3>
+              <p className="text-xs text-gray-400 leading-relaxed mb-6">
+                未対応の補充依頼（全 {items.filter(i => i.status === 'pending').length} 件）を一括で補充済みにアップデートします。
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowBulkCompleteConfirm(false)}
+                  disabled={isCompletingAll}
+                  className="flex-1 py-3 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-2xl text-xs font-black transition-colors"
+                >
+                  キャンセル
+                </button>
+                
+                <button
+                  onClick={bulkCompleteAll}
+                  disabled={isCompletingAll}
+                  className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl text-xs font-black shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  {isCompletingAll ? '処理中...' : 'はい、補充済みにする'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
