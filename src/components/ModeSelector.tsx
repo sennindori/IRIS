@@ -24,15 +24,15 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
       icon: Scan, 
       color: 'bg-red-50 text-red-500 border border-red-100/70', 
       hoverBg: 'hover:bg-red-50/20 hover:border-red-100',
-      desc: '依頼入力' 
+      desc: 'スキャンまたは手入力で補充依頼' 
     },
     { 
       id: 'quick' as AppMode, 
-      label: '定番商品', 
+      label: 'スタンダード', 
       icon: LayoutGrid, 
       color: 'bg-orange-50 text-orange-500 border border-orange-100/70', 
       hoverBg: 'hover:bg-orange-50/20 hover:border-orange-100',
-      desc: 'リストから選択' 
+      desc: 'リストから補充選択・項目追加' 
     },
     { 
       id: 'view' as AppMode, 
@@ -48,7 +48,7 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
       icon: MessageSquare, 
       color: 'bg-emerald-50 text-emerald-500 border border-emerald-100/70', 
       hoverBg: 'hover:bg-emerald-50/20 hover:border-emerald-100',
-      desc: '同僚への連絡・引継ぎ' 
+      desc: 'スタッフへの連絡事項' 
     },
   ];
 

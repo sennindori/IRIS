@@ -257,7 +257,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         maker: productInfo.maker || null,
         createdAt: serverTimestamp(),
       });
-      alert("定番商品として登録しました");
+      alert("スタンダードとして登録しました");
     } catch (err) {
       console.error(err);
       alert("登録に失敗しました");
@@ -428,7 +428,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                       className="mt-2 text-[10px] items-center gap-1 flex font-black text-blue-600 hover:text-blue-700 active:scale-95 transition-all"
                     >
                       {isRegisteringStandard ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
-                      定番商品リストに登録
+                      スタンダードリストに登録
                     </button>
                   )}
                 </div>

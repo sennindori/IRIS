@@ -137,7 +137,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
           <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
             <ArrowLeft />
           </button>
-          <h2 className="text-xl font-black text-gray-900 tracking-tight">定番商品登録</h2>
+          <h2 className="text-xl font-black text-gray-900 tracking-tight">スタンダード登録</h2>
         </div>
         {!selectedItem && (
           <button 
@@ -290,7 +290,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
               className="relative w-full max-w-sm bg-white rounded-[32px] overflow-hidden shadow-2xl"
             >
               <div className="p-6 border-b flex items-center justify-between">
-                <h3 className="text-xl font-black text-gray-900">定番商品の情報</h3>
+                <h3 className="text-xl font-black text-gray-900">スタンダードの情報</h3>
                 <button onClick={() => setShowEditModal(false)} className="p-2 text-gray-400 hover:text-gray-600">
                   <X size={24} />
                 </button>

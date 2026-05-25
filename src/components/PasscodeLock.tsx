@@ -57,6 +57,13 @@ export default function PasscodeLock({ onSuccess }: PasscodeLockProps) {
       {/* Decorative background element */}
       <div className="absolute inset-0 bg-radial-gradient from-blue-900/10 via-transparent to-transparent pointer-events-none" />
 
+      {/* App Header Title */}
+      <div className="w-full text-center py-2 sm:py-3 z-10 select-none border-b border-gray-900/30">
+        <span className="text-2xl sm:text-3xl font-black tracking-[0.25em] bg-gradient-to-r from-blue-400 via-emerald-400 to-indigo-400 bg-clip-text text-transparent font-mono">
+          I.R.I.S
+        </span>
+      </div>
+
       {/* Header / Info Section */}
       <div className="flex-1 flex flex-col items-center justify-center max-w-xs text-center z-10">
         <motion.div
