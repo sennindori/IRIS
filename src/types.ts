@@ -10,6 +10,7 @@ export interface ReplenishmentItem {
   status: ReplenishmentStatus;
   imageUrl?: string;
   createdAt: any; // Firestore Timestamp
+  fulfilledQuantity?: number; // 対応数 (実績値)
 }
 
 export type AppMode = 'menu' | 'scan' | 'view' | 'edit' | 'quick' | 'bbs';

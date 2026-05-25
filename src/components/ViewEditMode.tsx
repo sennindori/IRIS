@@ -50,7 +50,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
 
   // Editing state
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState({ productName: '', maker: '', quantity: '', unit: '' });
+  const [editValue, setEditValue] = useState({ productName: '', maker: '', quantity: '', unit: '', fulfilledQuantity: 0 });
   const [deletingId, setDeletingId] = useState<string | null>(null);
   
   // Clear modal/dropdown handles
@@ -114,12 +114,43 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
   // Switch status pending <-> completed
   async function toggleStatus(item: ReplenishmentItem) {
     const newStatus = item.status === 'pending' ? 'completed' : 'pending';
+    const targetQuantity = parseInt(item.quantity) || 0;
+    const updates: any = { status: newStatus };
+    if (newStatus === 'completed') {
+      updates.fulfilledQuantity = targetQuantity;
+    } else {
+      if ((item.fulfilledQuantity || 0) >= targetQuantity) {
+        updates.fulfilledQuantity = 0;
+      }
+    }
+
+    try {
+      await updateDoc(doc(db, 'replenishment_list', item.id), updates);
+    } catch (err) {
+      console.error("Update status failed", err);
+    }
+  }
+
+  // 対応数（実績値）の増減処理
+  async function updateFulfilledQuantity(item: ReplenishmentItem, delta: number) {
+    const currentFulfilled = item.fulfilledQuantity || 0;
+    const targetQuantity = parseInt(item.quantity) || 0;
+    const newFulfilled = Math.max(0, currentFulfilled + delta);
+    
+    let newStatus = item.status;
+    if (newFulfilled >= targetQuantity && targetQuantity > 0) {
+      newStatus = 'completed';
+    } else if (newFulfilled < targetQuantity && item.status === 'completed') {
+      newStatus = 'pending';
+    }
+
     try {
       await updateDoc(doc(db, 'replenishment_list', item.id), {
+        fulfilledQuantity: newFulfilled,
         status: newStatus
       });
     } catch (err) {
-      console.error("Update status failed", err);
+      console.error("Update fulfilled quantity failed", err);
     }
   }
 
@@ -177,7 +208,11 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
       const batch = writeBatch(db);
       pendingItems.forEach((item) => {
         const docRef = doc(db, 'replenishment_list', item.id);
-        batch.update(docRef, { status: 'completed' });
+        const qty = parseInt(item.quantity) || 0;
+        batch.update(docRef, { 
+          status: 'completed',
+          fulfilledQuantity: qty
+        });
       });
 
       await batch.commit();
@@ -197,26 +232,39 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
       productName: item.productName, 
       maker: item.maker || '',
       quantity: item.quantity,
-      unit: item.unit || '個'
+      unit: item.unit || '個',
+      fulfilledQuantity: item.fulfilledQuantity || 0
     });
   }
 
   // Persist inline edits to Firestore
   async function saveEdit() {
     if (!editingId) return;
-    const { productName, maker, quantity, unit } = editValue;
+    const { productName, maker, quantity, unit, fulfilledQuantity } = editValue;
     
     try {
       if (!productName.trim() || !quantity.trim()) {
         alert("商品名と数量を入力してください");
         return;
       }
+
+      const targetQuantity = parseInt(quantity) || 0;
+      const itemToEdit = items.find(i => i.id === editingId);
+      let newStatus = itemToEdit ? itemToEdit.status : 'pending';
+      if (fulfilledQuantity >= targetQuantity && targetQuantity > 0) {
+        newStatus = 'completed';
+      } else if (fulfilledQuantity < targetQuantity && newStatus === 'completed') {
+        newStatus = 'pending';
+      }
+
       const docRef = doc(db, 'replenishment_list', editingId);
       await updateDoc(docRef, {
         productName: productName.trim(),
         maker: maker.trim() || null,
         quantity: quantity.trim(),
-        unit: unit || '個'
+        unit: unit || '個',
+        fulfilledQuantity: fulfilledQuantity,
+        status: newStatus
       });
       setEditingId(null);
     } catch (err) {
@@ -458,10 +506,16 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                               <div className="flex items-end justify-between gap-2.5">
                                 <div className="flex-1 min-w-0">
                                   {item.maker && (
-                                    <span className="inline-block px-1.5 py-0.5 bg-white/10 backdrop-blur-md text-white text-[9px] font-black rounded-md border border-white/25 uppercase tracking-wider truncate max-w-full">
+                                    <span className="inline-block mb-1 px-1.5 py-0.5 bg-white/10 backdrop-blur-md text-white text-[9px] font-black rounded-md border border-white/25 uppercase tracking-wider truncate max-w-full">
                                       {item.maker}
                                     </span>
                                   )}
+                                  {/* リアルタイム補充進捗 */}
+                                  <div className="text-[10px] font-bold text-emerald-400 drop-shadow flex items-center gap-1.5 mt-0.5">
+                                    <span>対応: {item.fulfilledQuantity || 0}</span>
+                                    <span className="opacity-35">|</span>
+                                    <span className="text-orange-300">残り: {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}</span>
+                                  </div>
                                 </div>
                                 <div className="px-2.5 py-1 bg-blue-600 text-white rounded-lg shadow-[0_0_12px_rgba(37,99,235,0.3)] font-black text-base shrink-0 flex items-baseline">
                                   {item.quantity}
@@ -491,7 +545,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                     placeholder="補充リスト内から商品を検索"
                     value={listSearchQuery}
                     onChange={(e) => setListSearchQuery(e.target.value)}
-                    className="w-full bg-gray-900 border border-gray-800 rounded-2xl pl-10 pr-10 py-2.5 text-xs font-bold text-left outline-none placeholder-gray-500 focus:bg-gray-900 focus:border-blue-500 transition-all text-white"
+                    className="w-full bg-gray-900 border border-gray-800 rounded-2xl pl-10 pr-10 py-2.5 text-[16px] md:text-xs font-bold text-left outline-none placeholder-gray-500 focus:bg-gray-900 focus:border-blue-500 transition-all text-white"
                   />
                   {listSearchQuery && (
                     <button onClick={() => setListSearchQuery('')} className="absolute right-4 top-3 text-gray-500 hover:text-white">
@@ -547,7 +601,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                   type="text"
                                   value={editValue.maker}
                                   onChange={(e) => setEditValue({ ...editValue, maker: e.target.value })}
-                                  className="w-full px-4 py-2 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-xs"
+                                  className="w-full px-4 py-2 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-xs"
                                   placeholder="メーカー名 (任意)"
                                 />
                                 <input
@@ -564,31 +618,51 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                       setEditValue({ ...editValue, productName: val });
                                     }
                                   }}
-                                  className="w-full px-4 py-3 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-sm"
+                                  className="w-full px-4 py-3 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-sm"
                                   placeholder="商品名"
                                 />
-                                <div className="flex gap-2">
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={editValue.quantity}
-                                    onChange={(e) => {
-                                      const numericVal = e.target.value.replace(/[^0-9]/g, '');
-                                      setEditValue({ ...editValue, quantity: numericVal });
-                                    }}
-                                    className="flex-[2] px-4 py-3 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-sm"
-                                    placeholder="数量"
-                                  />
-                                  <select
-                                    value={editValue.unit}
-                                    onChange={(e) => setEditValue({ ...editValue, unit: e.target.value })}
-                                    className="flex-1 px-4 py-3 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold appearance-none text-sm cursor-pointer"
-                                  >
-                                    <option value="個">個</option>
-                                    <option value="ケース">ケース</option>
-                                    <option value="点">点</option>
-                                    <option value="箱">箱</option>
-                                  </select>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div>
+                                    <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">依頼数量</label>
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={editValue.quantity}
+                                      onChange={(e) => {
+                                        const numericVal = e.target.value.replace(/[^0-9]/g, '');
+                                        setEditValue({ ...editValue, quantity: numericVal });
+                                      }}
+                                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-xs"
+                                      placeholder="依頼数"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">現対応数</label>
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={editValue.fulfilledQuantity}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                                        setEditValue({ ...editValue, fulfilledQuantity: val });
+                                      }}
+                                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-xs"
+                                      placeholder="対応数"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">単位</label>
+                                    <select
+                                      value={editValue.unit}
+                                      onChange={(e) => setEditValue({ ...editValue, unit: e.target.value })}
+                                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 text-white rounded-xl focus:border-blue-500 outline-none font-bold appearance-none text-[16px] md:text-xs cursor-pointer"
+                                    >
+                                      <option value="個">個</option>
+                                      <option value="ケース">ケース</option>
+                                      <option value="点">点</option>
+                                      <option value="箱">箱</option>
+                                    </select>
+                                  </div>
                                 </div>
                                 <div className="flex gap-2 pt-1.5">
                                   <button onClick={saveEdit} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl flex items-center justify-center gap-1.5 font-black shadow-lg shadow-blue-500/10 text-xs">
@@ -616,19 +690,70 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                     {item.productName}
                                   </h3>
                                   
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex-1 min-w-0 pr-1.5">
+                                  <div className="flex flex-wrap items-center justify-between gap-3 mt-1.5 pt-2 border-t border-gray-800/40">
+                                    <div className="flex-1 min-w-0">
                                       {item.maker && (
-                                        <span className="inline-block px-1.5 py-0.5 bg-gray-800/80 text-gray-400 text-[10px] font-medium rounded-md truncate max-w-full">
+                                        <span className="inline-block px-1.5 py-0.5 bg-gray-800/80 text-gray-400 text-[9px] font-medium rounded-md truncate max-w-full mb-1">
                                           {item.maker}
                                         </span>
                                       )}
+                                      
+                                      {/* リアルタイム補充状況 (対応数/依頼数、残数) */}
+                                      <div className="text-xs font-bold text-gray-400 flex flex-col gap-0.5 justify-center">
+                                        <div className="flex items-center gap-1 leading-none">
+                                          <span>補充:</span>
+                                          <strong className="text-emerald-400 font-extrabold">{item.fulfilledQuantity || 0}</strong>
+                                          <span className="text-gray-500">/</span>
+                                          <span>{item.quantity}{item.unit || '個'}</span>
+                                        </div>
+                                        
+                                        {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0)) > 0 ? (
+                                          <div className="text-[10px] font-black tracking-wider text-orange-400 leading-none mt-1">
+                                            あと {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}{item.unit || '個'} 不足
+                                          </div>
+                                        ) : (
+                                          <div className="text-[10px] font-black tracking-wider text-emerald-400 flex items-center gap-1 leading-none mt-1">
+                                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                            補充完了
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
-                                    <div className="inline-block px-2.5 py-1 bg-gray-950 border border-gray-800 shadow-inner rounded-lg shrink-0">
-                                      <p className="text-sm font-black text-blue-400">
-                                        {item.quantity}
-                                        <span className="text-[10px] ml-0.5 opacity-60 text-gray-400">{item.unit || '個'}</span>
-                                      </p>
+
+                                    {/* 対応数の増減コントローラー */}
+                                    <div className="flex items-center bg-gray-950 border border-gray-850 rounded-xl p-1 shrink-0 shadow-inner select-none">
+                                      <button
+                                        onClick={() => updateFulfilledQuantity(item, -1)}
+                                        disabled={!(item.fulfilledQuantity && item.fulfilledQuantity > 0)}
+                                        className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors text-sm font-black ${
+                                          (item.fulfilledQuantity && item.fulfilledQuantity > 0)
+                                            ? 'bg-gray-855 hover:bg-gray-805 active:bg-gray-750 text-gray-300'
+                                            : 'text-gray-700 cursor-not-allowed'
+                                        }`}
+                                        title="-1"
+                                      >
+                                        ー
+                                      </button>
+                                      
+                                      <div className="px-2 text-center min-w-[2.2rem]">
+                                        <div className="text-[7px] text-gray-500 font-bold leading-none mb-0.5 uppercase tracking-wider">実績</div>
+                                        <div className="text-xs font-black text-gray-200 leading-none">
+                                          {item.fulfilledQuantity || 0}
+                                        </div>
+                                      </div>
+                                      
+                                      <button
+                                        onClick={() => updateFulfilledQuantity(item, 1)}
+                                        disabled={item.status === 'completed'}
+                                        className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors text-sm font-black ${
+                                          item.status === 'completed'
+                                            ? 'text-gray-750 cursor-not-allowed'
+                                            : 'bg-gray-855 hover:bg-gray-805 active:bg-gray-750 text-gray-300 hover:text-white'
+                                        }`}
+                                        title="+1"
+                                      >
+                                        ＋
+                                      </button>
                                     </div>
                                   </div>
                                 </div>
