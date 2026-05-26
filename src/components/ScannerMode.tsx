@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { db } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ArrowLeft, Loader2, Send, CheckCircle2, Scan, AlertCircle, RefreshCw, Plus, Search, Keyboard, X, Delete } from 'lucide-react';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
+import { ArrowLeft, Loader2, Send, CheckCircle2, Scan, AlertCircle, RefreshCw, Plus, Search, Keyboard, X, Delete, Clipboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ScannerModeProps {
@@ -34,6 +34,52 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
+  // クリップボードからバーコードをコピーして入力欄に貼り付ける関数
+  async function handlePaste() {
+    try {
+      if (!navigator.clipboard) {
+        return;
+      }
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        // 余計な空白を取り除く
+        const trimmed = text.trim();
+        // バーコードは一般的に数値なので、数値以外のノイズを除去したバージョンを作る
+        const numericOnly = trimmed.replace(/[^0-9]/g, '');
+        if (numericOnly) {
+          setManualCode(numericOnly);
+        } else {
+          setManualCode(trimmed);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to paste clipoard content. Clipboard read API is often blocked inside standard iframes or requires permission approval:", err);
+    }
+  }
+
+  // 定番マスタ商品 (standard_items) から JANコード で優先検索するヘルパー関数
+  async function findStandardProduct(janCode: string) {
+    try {
+      const q = query(
+        collection(db, 'standard_items'),
+        where('janCode', '==', janCode),
+        limit(1)
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const docData = snapshot.docs[0].data();
+        return {
+          productName: docData.name as string,
+          maker: docData.maker || undefined,
+          imageUrl: docData.imageUrl || undefined
+        };
+      }
+    } catch (err) {
+      console.error("Firestore standard_items lookup error:", err);
+    }
+    return null;
+  }
+
   // Auto-search candidate when 13 or 14 digits are typed
   useEffect(() => {
     if (showTenkey && (manualCode.length === 13 || manualCode.length === 14)) {
@@ -44,6 +90,14 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         const fetchCandidate = async () => {
           setIsSearchingCandidate(true);
           try {
+            // 1. まずは登録済みの定番マスタからマッチング
+            const standardProd = await findStandardProduct(code);
+            if (standardProd) {
+              setCandidateProduct(standardProd);
+              return;
+            }
+
+            // 2. なければYahoo!ショッピングAPIを使用
             const res = await fetch(`/api/product/${code}`);
             if (res.ok) {
               const data = await res.json();
@@ -214,6 +268,14 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   async function fetchProductInfo(janCode: string) {
     setIsSearching(true);
     try {
+      // 1. まずは登録済みの定番マスタ (standard_items) からマッチング
+      const standardProd = await findStandardProduct(janCode);
+      if (standardProd) {
+        setProductInfo(standardProd);
+        return;
+      }
+
+      // 2. なければYahoo!ショッピングAPIを使用
       const res = await fetch(`/api/product/${janCode}`);
       if (res.ok) {
         const data = await res.json();
@@ -406,6 +468,13 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                     </button>
                   </div>
                   <button
+                    onClick={handlePaste}
+                    className="p-4 bg-white/20 backdrop-blur-xl border border-white/30 hover:bg-white/30 text-white rounded-2xl active:scale-95 transition-all flex items-center justify-center shrink-0"
+                    title="コピーしたバーコードを貼り付け"
+                  >
+                    <Clipboard size={24} />
+                  </button>
+                  <button
                     onClick={() => setShowTenkey(true)}
                     className="p-4 bg-white/20 backdrop-blur-xl border border-white/30 hover:bg-white/30 text-white rounded-2xl active:scale-95 transition-all flex items-center justify-center shrink-0"
                     title="テンキーを入力する"
@@ -521,7 +590,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                 <div className="space-y-1.5 text-left">
                   <label className="block text-sm font-bold text-gray-700 mb-1 pl-1">売場 (サブカテゴリ)</label>
                   <div className="flex bg-gray-100 p-1.5 rounded-2xl gap-1">
-                    {['通常', '催事', 'エンド', 'その他'].map((s) => (
+                    {['通常', '催事', 'エンド', '客注', 'その他'].map((s) => (
                       <button
                         key={s}
                         onClick={() => setSubcategory(s)}
@@ -611,15 +680,23 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                 </button>
               </div>
 
-              <div className="bg-gray-950 border border-gray-800 rounded-2xl p-4 mb-4 relative min-h-[72px] flex flex-col justify-center items-center">
+              <div className="bg-gray-950 border border-gray-800 rounded-2xl p-4 pr-14 mb-4 relative min-h-[72px] flex flex-col justify-center items-center">
                 <span className="text-3xl font-mono text-white font-black tracking-widest break-all">
-                  {manualCode || <span className="text-gray-600 font-sans text-lg tracking-normal font-medium">コードを入力...</span>}
+                  {manualCode || <span className="text-gray-600 font-sans text-lg tracking-normal font-medium text-gray-500">コードを入力...</span>}
                 </span>
                 {manualCode.length > 0 && (
                   <span className="text-[10px] text-blue-400 font-mono font-bold mt-1 uppercase tracking-wider">
                     {manualCode.length} 桁 (JAN: 13 / ITF: 14)
                   </span>
                 )}
+                <button
+                  onClick={handlePaste}
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-gray-800 hover:bg-gray-700 text-blue-400 hover:text-blue-300 rounded-xl transition-all active:scale-95 border border-gray-700/50 flex items-center justify-center shadow"
+                  title="貼り付け"
+                >
+                  <Clipboard size={18} />
+                </button>
               </div>
 
               {/* Real-time Candidate Display */}

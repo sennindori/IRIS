@@ -513,6 +513,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                     </span>
                                   )}
                                   <span className={`inline-block mb-1 px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full ${
+                                    item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
                                     item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
                                     item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
                                     item.subcategory === 'その他' ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/60' :
@@ -677,13 +678,13 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
 
                                 <div>
                                   <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">売場サブカテゴリ</label>
-                                  <div className="flex bg-gray-950 border border-gray-850 p-1 rounded-xl gap-1">
-                                    {['通常', '催事', 'エンド', 'その他'].map((s) => (
+                                  <div className="flex bg-gray-950 border border-gray-850 p-1 rounded-xl gap-1 overflow-x-auto scrollbar-none">
+                                    {['通常', '催事', 'エンド', '客注', 'その他'].map((s) => (
                                       <button
                                         key={s}
                                         type="button"
                                         onClick={() => setEditValue({ ...editValue, subcategory: s })}
-                                        className={`flex-1 py-1.5 text-[11px] font-black rounded-lg transition-all ${
+                                        className={`flex-1 min-w-[3.2rem] py-1.5 text-[11px] font-black rounded-lg transition-all ${
                                           editValue.subcategory === s 
                                             ? 'bg-blue-600 text-white' 
                                             : 'text-gray-500 hover:text-gray-300'
@@ -729,6 +730,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                         </span>
                                       )}
                                       <span className={`inline-block px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full mb-1 ${
+                                        item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
                                         item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
                                         item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
                                         item.subcategory === 'その他' ? 'bg-zinc-800/85 text-zinc-400 border-zinc-700' :

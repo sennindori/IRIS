@@ -257,7 +257,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
                 <div className="space-y-1.5 text-left">
                   <span className="text-[11px] font-black text-gray-400 pl-1">売場 (サブカテゴリ)</span>
                   <div className="flex bg-gray-100 p-1 rounded-2xl gap-1">
-                    {['通常', '催事', 'エンド', 'その他'].map((s) => (
+                    {['通常', '催事', 'エンド', '客注', 'その他'].map((s) => (
                       <button
                         key={s}
                         onClick={() => setSubcategory(s)}
