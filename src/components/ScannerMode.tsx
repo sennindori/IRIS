@@ -710,6 +710,11 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                         type="text"
                         value={editableProductName}
                         onChange={(e) => setEditableProductName(e.target.value)}
+                        onFocus={(e) => {
+                          if (editableProductName.includes('不明な商品') || editableProductName.includes('検索エラー')) {
+                            setEditableProductName('');
+                          }
+                        }}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-950 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none font-bold text-sm"
                         placeholder="商品名を手動で変更..."
                       />

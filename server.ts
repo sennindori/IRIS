@@ -23,61 +23,16 @@ const ai = new GoogleGenAI({
 // Local in-memory cache to save lookup API calls, speed up scans, and protect quota limit
 const janCache = new Map<string, { productName: string; maker: string | null; imageUrl: string | null }>();
 
-// Helper: Query Gemini to find product by JAN code (Google Search Grounding with pure parametric fallback)
+// Helper: Query Gemini to find product by JAN code (Pure parametric lookup with Search Grounding as precise backup)
 async function findProductWithGemini(janCode: string) {
   if (!process.env.GEMINI_API_KEY) {
     console.warn("GEMINI_API_KEY is not configured. Cannot perform Gemini Search fallback.");
     return null;
   }
 
-  // Attempt 1: Search Grounding (Very precise, handles new, niche, or specific products)
+  // Attempt 1: Parametric Lookup (Uses standard text API which has massive quota limits, bypasses search grounding 429 issues)
   try {
-    console.log(`[Gemini Fallback - Attempt 1] Looking up JAN code: ${janCode} via Google Search Grounding...`);
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: `JANコード（バーコード番号）: ${janCode} に完全に一致する、日本国内で販売されている既製品の正確な商品名とメーカー名（またはブランド名）を特定してください。
-日本第一の市場に合わせて特定し、容量・パック本数などの仕様情報があれば商品名に含めてください。
-実在する商品でない場合は、productNameとmakerの両方にnullを設定してください。`,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            productName: {
-              type: Type.STRING,
-              description: "商品名。特定できない場合は null",
-            },
-            maker: {
-              type: Type.STRING,
-              description: "メーカー名・ブランド名。特定できない場合は null",
-            },
-          },
-          required: ["productName", "maker"]
-        }
-      }
-    });
-
-    const text = response.text;
-    if (text) {
-      const parsed = JSON.parse(text);
-      if (parsed.productName && parsed.productName !== "null") {
-        console.log(`[Gemini Fallback - Attempt 1 Success]: ${parsed.productName} (${parsed.maker})`);
-        return {
-          productName: parsed.productName,
-          maker: parsed.maker || null,
-          imageUrl: null
-        };
-      }
-    }
-  } catch (err: any) {
-    console.error("Gemini search grounding error (Attempt 1 failed):", err?.message || err);
-    // Continue directly to Attempt 2
-  }
-
-  // Attempt 2: Parametric Fallback without tools (bypasses search grounding quota limits and 429 errors)
-  try {
-    console.log(`[Gemini Fallback - Attempt 2] Running pure parametric model lookup for JAN code: ${janCode} to bypass search tool quota limits...`);
+    console.log(`[Gemini Fallback - Attempt 1] Running pure parametric model lookup for JAN code: ${janCode}...`);
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
       contents: `あなたは熟練した日本の流通・EC商品データベース検索機です。
@@ -113,7 +68,7 @@ JANの事業者コード等から判断して最も確度が高い商品名を�
     if (text) {
       const parsed = JSON.parse(text);
       if (parsed.productName && parsed.productName !== "null") {
-        console.log(`[Gemini Fallback - Attempt 2 Success]: ${parsed.productName} (${parsed.maker})`);
+        console.log(`[Gemini Fallback - Attempt 1 Success]: ${parsed.productName} (${parsed.maker})`);
         return {
           productName: parsed.productName,
           maker: parsed.maker || null,
@@ -122,7 +77,57 @@ JANの事業者コード等から判断して最も確度が高い商品名を�
       }
     }
   } catch (fallbackErr: any) {
-    console.error("Gemini pure parametric search error:", fallbackErr?.message || fallbackErr);
+    console.warn("Gemini pure parametric search warning:", fallbackErr?.message || fallbackErr);
+  }
+
+  // Attempt 2: Search Grounding (Very precise backup, handles newer or highly niche products, wrapped with friendly quota warnings)
+  try {
+    console.log(`[Gemini Fallback - Attempt 2] Backing up with Google Search Grounding for JAN: ${janCode}...`);
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: `JANコード（バーコード番号）: ${janCode} に完全に一致する、日本国内で販売されている既製品の正確な商品名とメーカー名（またはブランド名）を特定してください。
+日本第一の市場に合わせて特定し、容量・パック本数などの仕様情報があれば商品名に含めてください。
+実在する商品でない場合は、productNameとmakerの両方にnullを設定してください。`,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            productName: {
+              type: Type.STRING,
+              description: "商品名。特定できない場合は null",
+            },
+            maker: {
+              type: Type.STRING,
+              description: "メーカー名・ブランド名。特定できない場合は null",
+            },
+          },
+          required: ["productName", "maker"]
+        }
+      }
+    });
+
+    const text = response.text;
+    if (text) {
+      const parsed = JSON.parse(text);
+      if (parsed.productName && parsed.productName !== "null") {
+        console.log(`[Gemini Fallback - Attempt 2 Success]: ${parsed.productName} (${parsed.maker})`);
+        return {
+          productName: parsed.productName,
+          maker: parsed.maker || null,
+          imageUrl: null
+        };
+      }
+    }
+  } catch (err: any) {
+    // If the search grounding tool has run out of quota (429/RESOURCE_EXHAUSTED), handle quietly
+    const isQuotaExceeded = err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("429");
+    if (isQuotaExceeded) {
+      console.warn(`[Gemini Info] Search grounding is currently limited/exhausted. This is expected behavior on free tiers. Moving on smoothly...`);
+    } else {
+      console.warn("Gemini search grounding error (Attempt 2 fallback handled):", err?.message || err);
+    }
   }
 
   return null;
