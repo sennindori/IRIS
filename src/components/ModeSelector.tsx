@@ -27,14 +27,6 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
       desc: 'スキャンまたは手入力で補充依頼' 
     },
     { 
-      id: 'quick' as AppMode, 
-      label: 'スタンダード', 
-      icon: LayoutGrid, 
-      color: 'bg-orange-50 text-orange-500 border border-orange-100/70', 
-      hoverBg: 'hover:bg-orange-50/20 hover:border-orange-100',
-      desc: 'リストから補充選択・項目追加' 
-    },
-    { 
       id: 'view' as AppMode, 
       label: '補充確認', 
       icon: Eye, 

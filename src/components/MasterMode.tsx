@@ -16,7 +16,8 @@ import {
   Maximize,
   Clipboard,
   Check,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { 
@@ -100,6 +101,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   const [newMaker, setNewMaker] = useState('');
   const [newSize, setNewSize] = useState('');
   const [newRemarks, setNewRemarks] = useState('');
+  const [newUnit, setNewUnit] = useState('個');
   const [isRegistering, setIsRegistering] = useState(false);
   const [pasteSuccess, setPasteSuccess] = useState(false);
 
@@ -109,6 +111,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   const [editMaker, setEditMaker] = useState('');
   const [editSize, setEditSize] = useState('');
   const [editRemarks, setEditRemarks] = useState('');
+  const [editUnit, setEditUnit] = useState('個');
   const [isSaving, setIsSaving] = useState(false);
 
   // Delete confirm state
@@ -124,16 +127,105 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   useEffect(() => {
     const q = query(collection(db, 'standard_items'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const data = snapshot.docs
+        .filter(doc => !doc.data().isDeleted)
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
       setStandardItems(data);
     }, (error) => {
       console.error("Failed to fetch standard items:", error);
     });
     return () => unsubscribe();
   }, []);
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Helper to parse standard item name, extractor for product name, size & maker
+  function parseStandardItem(item: { name: string; maker?: string | null }) {
+    let tempName = item.name.trim();
+    let maker = (item.maker || "").trim();
+    let size = "";
+
+    // 1. If maker is empty and tempName is separated by spaces, take the first segment as maker
+    if (!maker) {
+      const spaceIndex = tempName.search(/[\s　]/);
+      if (spaceIndex !== -1) {
+        maker = tempName.substring(0, spaceIndex).trim();
+        tempName = tempName.substring(spaceIndex + 1).trim();
+      }
+    }
+
+    // 2. Extract size (end of the string matching digits + capacity units)
+    const sizeRegex = /([\d\.]+\s*(?:ml|mL|ML|l|L|g|G|kg|KG|本|缶|パック|P|p|袋|個)|[０-９．]+\s*(?:ｍｌ|ｍＬ|ＭＬ|ｌ|Ｌ|ｇ|Ｇ|ｋｇ|ＫＧ|本|缶|パック|Ｐ|ｐ|袋|個))$/i;
+    const match = tempName.match(sizeRegex);
+    if (match) {
+      size = match[1].trim();
+      tempName = tempName.substring(0, match.index).trim();
+    }
+
+    return {
+      maker: maker || null,
+      productName: tempName,
+      size: size || null
+    };
+  }
+
+  async function handleSyncFromStandard() {
+    if (standardItems.length === 0) {
+      alert("同期するSTD商品がありません。");
+      return;
+    }
+
+    if (!confirm(`現在登録されているSTD商品（${standardItems.length}件）を、サイズなどで区切って商品マスタデータベースに反映（新規追加・更新）しますか？`)) {
+      return;
+    }
+
+    setIsSyncing(true);
+    let addedCount = 0;
+    let skippedCount = 0;
+
+    try {
+      for (const std of standardItems) {
+        if (!std.janCode) {
+          skippedCount++;
+          continue;
+        }
+
+        // Check if already registered in product_master
+        const isDuplicated = items.some(item => item.janCode === std.janCode);
+        if (isDuplicated) {
+          skippedCount++;
+          continue;
+        }
+
+        // Parse name into separate maker, name, and size fields
+        const parsed = parseStandardItem({
+          name: std.name || "",
+          maker: std.maker || ""
+        });
+
+        await addDoc(collection(db, 'product_master'), {
+          janCode: std.janCode.trim(),
+          productName: parsed.productName.trim(),
+          maker: parsed.maker ? parsed.maker.trim() : null,
+          size: parsed.size ? parsed.size.trim() : null,
+          remarks: null,
+          createdAt: serverTimestamp()
+        });
+
+        addedCount++;
+      }
+
+      alert(`一括反映が完了しました！\n新規登録: ${addedCount} 件\n重複またはスキップ: ${skippedCount} 件`);
+    } catch (err) {
+      console.error("STD同期エラー: ", err);
+      alert("反映処理中にエラーが発生しました。");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
 
   // Register an item to standard list
   async function handleRegisterToStandard(item: ProductMasterItem) {
@@ -146,7 +238,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       });
     } catch (err) {
       console.error("Failed to register standard item:", err);
-      alert("定番登録に失敗しました。");
+      alert("STD登録に失敗しました。");
     }
   }
 
@@ -158,7 +250,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       await deleteDoc(doc(db, 'standard_items', matched.id));
     } catch (err) {
       console.error("Failed to remove standard item:", err);
-      alert("定番解除に失敗しました。");
+      alert("STD解除に失敗しました。");
     }
   }
 
@@ -231,6 +323,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         maker: newMaker.trim() || null,
         size: newSize.trim() || null,
         remarks: newRemarks.trim() || null,
+        unit: newUnit || null,
         createdAt: serverTimestamp()
       });
       // Reset form states
@@ -239,6 +332,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       setNewMaker('');
       setNewSize('');
       setNewRemarks('');
+      setNewUnit('個');
       setShowAddForm(false);
     } catch (err) {
       console.error("Failed to register master item:", err);
@@ -255,6 +349,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     setEditMaker(item.maker || '');
     setEditSize(item.size || '');
     setEditRemarks(item.remarks || '');
+    setEditUnit(item.unit || '個');
   }
 
   // Cancel edit
@@ -274,7 +369,8 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         productName: editName.trim(),
         maker: editMaker.trim() || null,
         size: editSize.trim() || null,
-        remarks: editRemarks.trim() || null
+        remarks: editRemarks.trim() || null,
+        unit: editUnit || null
       });
       setEditingId(null);
     } catch (err) {
@@ -324,13 +420,29 @@ export default function MasterMode({ onBack }: MasterModeProps) {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl active:scale-95 transition-all shadow-lg shadow-blue-950/20"
-        >
-          <Plus size={14} />
-          新規追加
-        </button>
+        <div className="flex gap-2">
+          {standardItems.length > 0 && (
+            <button
+              onClick={handleSyncFromStandard}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl active:scale-95 transition-all shadow-lg shadow-emerald-950/10 disabled:opacity-50 cursor-pointer"
+            >
+              {isSyncing ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <RefreshCw size={13} />
+              )}
+              STD一括反映
+            </button>
+          )}
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl active:scale-95 transition-all shadow-lg shadow-blue-950/20 cursor-pointer"
+          >
+            <Plus size={14} />
+            新規追加
+          </button>
+        </div>
       </header>
 
       {/* SEARCH / CONTROLS */}
@@ -442,6 +554,24 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                           />
                         </div>
 
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-gray-400 font-black uppercase">デフォルト単位</label>
+                          <select
+                            value={editUnit}
+                            onChange={(e) => setEditUnit(e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-xs text-white outline-none"
+                          >
+                            <option value="個">個</option>
+                            <option value="ケース">ケース</option>
+                            <option value="袋">袋</option>
+                            <option value="本">本</option>
+                            <option value="パック">パック</option>
+                            <option value="缶">缶</option>
+                            <option value="シート">シート</option>
+                            <option value="その他">その他</option>
+                          </select>
+                        </div>
+
                         <div className="col-span-2 space-y-1">
                           <label className="text-[10px] text-gray-400 font-black uppercase">備考</label>
                           <input
@@ -478,6 +608,11 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                               {item.size}
                             </span>
                           )}
+                          {item.unit && (
+                            <span className="text-[10px] font-extrabold text-teal-400 bg-teal-950/30 border border-teal-900/30 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                              単位: {item.unit}
+                            </span>
+                          )}
                         </div>
                         
                         <h3 className="text-sm font-black text-white tracking-tight leading-snug truncate">
@@ -491,25 +626,25 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                           </p>
                         )}
 
-                        {/* 定番マスタへの登録・解除ボタン */}
+                        {/* 定番登録・解除ボタン */}
                         <div className="mt-2.5 flex items-center">
                           {standardItems.some((std) => std.janCode === item.janCode) ? (
                             <button
                               onClick={() => handleRemoveFromStandard(item)}
                               className="px-2 py-0.5 bg-emerald-950/45 text-emerald-400 hover:bg-emerald-900/40 border border-emerald-900/40 text-[9px] font-black rounded-md flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
-                              title="クリックして定番マスタから解除"
+                              title="クリックしてSTDから解除"
                             >
                               <Check size={10} />
-                              定番登録済み
+                              STD登録済み
                             </button>
                           ) : (
                             <button
                               onClick={() => handleRegisterToStandard(item)}
                               className="px-2 py-0.5 bg-gray-800 hover:bg-gray-750 text-gray-450 hover:text-white border border-gray-700/60 text-[9px] font-black rounded-md flex items-center gap-0.5 transition-all active:scale-95 cursor-pointer"
-                              title="クリックして定番マスタに登録"
+                              title="クリックしてSTDとして起用"
                             >
                               <Plus size={10} />
-                              定番マスタに登録
+                              STDとして起用
                             </button>
                           )}
                         </div>
@@ -626,7 +761,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
                 <div className="grid grid-cols-2 gap-4">
                   {/* Maker */}
-                  <div className="space-y-1.5">
+                  <div className="col-span-2 space-y-1.5">
                     <label className="block text-gray-400 font-black uppercase tracking-wider pl-0.5">メーカー (ブランド)</label>
                     <input
                       type="text"
@@ -647,6 +782,25 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                       className="w-full px-4 py-3 bg-gray-800 border border-gray-700 text-white rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 outline-none font-bold text-sm"
                       placeholder="例: 1000g, 4.2kg"
                     />
+                  </div>
+
+                  {/* Unit */}
+                  <div className="space-y-1.5">
+                    <label className="block text-gray-400 font-black uppercase tracking-wider pl-0.5">デフォルト単位</label>
+                    <select
+                      value={newUnit}
+                      onChange={(e) => setNewUnit(e.target.value)}
+                      className="w-full px-4 py-3.5 bg-gray-800 border border-gray-700 text-white rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 outline-none font-bold text-sm"
+                    >
+                      <option value="個">個</option>
+                      <option value="ケース">ケース</option>
+                      <option value="袋">袋</option>
+                      <option value="本">本</option>
+                      <option value="パック">パック</option>
+                      <option value="缶">缶</option>
+                      <option value="シート">シート</option>
+                      <option value="その他">その他</option>
+                    </select>
                   </div>
                 </div>
 

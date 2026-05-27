@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Search, Plus, Minus, Check, Edit2, Save, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, Plus, Minus, Check, Edit2, Save, X, Loader2, Trash2 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, addDoc, updateDoc, doc, serverTimestamp, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, deleteDoc, serverTimestamp, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { STANDARD_ITEMS } from '../constants/standardItems';
 
 interface QuickModeProps {
@@ -32,7 +32,10 @@ export default function QuickMode({ onBack }: QuickModeProps) {
         id: doc.id,
         maker: doc.data().maker || 'Other',
         name: doc.data().name,
-        janCode: doc.data().janCode
+        janCode: doc.data().janCode,
+        isDeleted: doc.data().isDeleted || false,
+        deletedId: doc.data().deletedId || null,
+        originalStdId: doc.data().originalStdId || null
       }));
       setDbItems(items);
       setIsLoading(false);
@@ -40,9 +43,17 @@ export default function QuickMode({ onBack }: QuickModeProps) {
     return () => unsubscribe();
   }, []);
 
+  const activeDbItems = dbItems.filter(item => !item.isDeleted);
+  const deletedStdIds = new Set(dbItems.filter(item => item.isDeleted).map(item => item.deletedId));
+  const deletedStdNames = new Set(dbItems.filter(item => item.isDeleted).map(item => item.name));
+
   const allItems = [
-    ...dbItems, 
-    ...STANDARD_ITEMS.filter(std => !dbItems.some(dbItem => dbItem.name === std.name))
+    ...activeDbItems, 
+    ...STANDARD_ITEMS.filter(std => 
+      !deletedStdIds.has(std.id) &&
+      !deletedStdNames.has(std.name) &&
+      !activeDbItems.some(dbItem => dbItem.name === std.name || dbItem.originalStdId === std.id)
+    )
   ];
   
   const filteredItems = allItems.filter(item => 
@@ -98,19 +109,35 @@ export default function QuickMode({ onBack }: QuickModeProps) {
         }
       } else {
         // Create new item
+        const isFromStd = editingItemData.id && editingItemData.id.startsWith('std-');
         const docRef = await addDoc(collection(db, 'standard_items'), {
           name: editingItemData.name,
           maker: editingItemData.maker || null,
           janCode: editingItemData.janCode || 'STANDARD',
+          originalStdId: isFromStd ? editingItemData.id : null,
           createdAt: serverTimestamp(),
         });
+        
+        // If overriding a default standard item, flag it as deleted/hidden
+        if (isFromStd) {
+          await addDoc(collection(db, 'standard_items'), {
+            name: editingItemData.name,
+            maker: editingItemData.maker || null,
+            janCode: 'STANDARD',
+            deletedId: editingItemData.id,
+            isDeleted: true,
+            createdAt: serverTimestamp()
+          });
+        }
+
         // If it was a hardcoded item being "upgraded" to DB item, switch selection
         if (selectedItem && selectedItem.id === editingItemData.id) {
           setSelectedItem({ 
             id: docRef.id,
             name: editingItemData.name,
             maker: editingItemData.maker || null,
-            janCode: editingItemData.janCode || 'STANDARD'
+            janCode: editingItemData.janCode || 'STANDARD',
+            originalStdId: isFromStd ? editingItemData.id : null
           });
         }
       }
@@ -119,6 +146,51 @@ export default function QuickMode({ onBack }: QuickModeProps) {
     } catch (err) {
       console.error(err);
       alert('反映に失敗しました');
+    } finally {
+      setIsManaging(false);
+    }
+  }
+
+  async function handleDeleteStandardItem() {
+    if (!editingItemData || !editingItemData.id) return;
+    
+    if (!confirm("この商品をSTDリストから削除しますか？")) return;
+    
+    setIsManaging(true);
+    try {
+      if (editingItemData.id.startsWith('std-')) {
+        // 初期商品の場合は、Firestoreに「削除済みフラグ」を立てて追加し非表示にする
+        await addDoc(collection(db, 'standard_items'), {
+          name: editingItemData.name,
+          maker: editingItemData.maker || null,
+          janCode: 'STANDARD',
+          deletedId: editingItemData.id,
+          isDeleted: true,
+          createdAt: serverTimestamp()
+        });
+      } else {
+        // DB登録済みの商品の場合はそのドキュメントを削除
+        // もし初期商品の同名復活・表示を避けるため、一致する初期商品があれば削除フラグを立てる
+        const matchedStd = STANDARD_ITEMS.find(std => std.name === editingItemData.name) || 
+                           (editingItemData.originalStdId ? STANDARD_ITEMS.find(std => std.id === editingItemData.originalStdId) : null);
+        if (matchedStd) {
+          await addDoc(collection(db, 'standard_items'), {
+            name: editingItemData.name,
+            maker: editingItemData.maker || null,
+            janCode: 'STANDARD',
+            deletedId: matchedStd.id,
+            isDeleted: true,
+            createdAt: serverTimestamp()
+          });
+        }
+        await deleteDoc(doc(db, 'standard_items', editingItemData.id));
+      }
+      setShowEditModal(false);
+      setEditingItemData(null);
+      setSelectedItem(null);
+    } catch (err) {
+      console.error("Failed to delete standard item:", err);
+      alert("削除に失敗しました。");
     } finally {
       setIsManaging(false);
     }
@@ -140,7 +212,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
           <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
             <ArrowLeft />
           </button>
-          <h2 className="text-xl font-black text-gray-900 tracking-tight">スタンダード登録</h2>
+          <h2 className="text-xl font-black text-gray-900 tracking-tight">STD登録</h2>
         </div>
         {!selectedItem && (
           <button 
@@ -310,7 +382,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
               className="relative w-full max-w-sm bg-white rounded-[32px] overflow-hidden shadow-2xl"
             >
               <div className="p-6 border-b flex items-center justify-between">
-                <h3 className="text-xl font-black text-gray-900">スタンダードの情報</h3>
+                <h3 className="text-xl font-black text-gray-900">STD商品の情報</h3>
                 <button onClick={() => setShowEditModal(false)} className="p-2 text-gray-400 hover:text-gray-600">
                   <X size={24} />
                 </button>
@@ -337,19 +409,30 @@ export default function QuickMode({ onBack }: QuickModeProps) {
                   />
                 </div>
               </div>
-              <div className="p-6 bg-gray-50 flex gap-3">
+              <div className="p-6 bg-gray-50 flex gap-2">
+                {editingItemData?.id && (
+                  <button
+                    onClick={handleDeleteStandardItem}
+                    disabled={isManaging}
+                    className="px-4 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-black flex items-center justify-center gap-1.5 transition-colors border border-red-200 text-sm shrink-0 active:scale-95"
+                    title="STDリストから削除"
+                  >
+                    <Trash2 size={16} />
+                    <span>削除</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setShowEditModal(false)}
-                  className="flex-1 py-4 bg-white text-gray-900 rounded-2xl font-black border border-gray-200 active:scale-95 transition-transform"
+                  className="flex-1 py-4 bg-white text-gray-900 rounded-2xl font-black border border-gray-200 active:scale-95 transition-transform text-sm"
                 >
                   閉じる
                 </button>
                 <button
                   onClick={handleSaveStandardItem}
                   disabled={isManaging || !editingItemData.name}
-                  className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-50 shadow-lg shadow-blue-100"
+                  className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-50 shadow-lg shadow-blue-100 text-sm"
                 >
-                  {isManaging ? '反映中...' : <><Save size={18} /> 反映</>}
+                  {isManaging ? '反映中...' : <><Save size={16} /> 反映</>}
                 </button>
               </div>
             </motion.div>

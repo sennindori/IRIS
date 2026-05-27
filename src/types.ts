@@ -21,6 +21,7 @@ export interface ProductMasterItem {
   maker?: string;
   size?: string;
   remarks?: string;
+  unit?: string;
   createdAt: any;
 }
 
