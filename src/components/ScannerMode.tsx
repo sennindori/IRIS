@@ -42,26 +42,38 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  // クリップボードからバーコードをコピーして入力欄に貼り付ける関数
+  // クリップボードからバーコードをコピーして入力欄に貼り付け、即座に検索を実行する関数
   async function handlePaste() {
-    try {
-      if (!navigator.clipboard) {
-        return;
-      }
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        // 余計な空白を取り除く
-        const trimmed = text.trim();
-        // バーコードは一般的に数値なので、数値以外のノイズを除去したバージョンを作る
-        const numericOnly = trimmed.replace(/[^0-9]/g, '');
-        if (numericOnly) {
-          setManualCode(numericOnly);
-        } else {
-          setManualCode(trimmed);
+    const processPastedCode = (text: string) => {
+      const trimmed = text.trim();
+      const numericOnly = trimmed.replace(/[^0-9]/g, '');
+      const code = numericOnly || trimmed;
+      if (code) {
+        setManualCode(code);
+        setScannedCode(code);
+        setShowTenkey(false);
+        fetchProductInfo(code);
+        
+        if (scannerRef.current && scannerRef.current.isScanning) {
+          scannerRef.current.pause(true);
         }
       }
+    };
+
+    try {
+      if (!navigator.clipboard) {
+        throw new Error("Clipboard API not supported on this browser.");
+      }
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        processPastedCode(text);
+      }
     } catch (err) {
-      console.warn("Failed to paste clipoard content. Clipboard read API is often blocked inside standard iframes or requires permission approval:", err);
+      console.warn("Clipboard API blocked or not allowed. Falling back to input prompt:", err);
+      const text = prompt("コピーしたバーコードをここに貼り付け（Ctrl+V / Cmd+V）して「OK」を押してください：");
+      if (text && text.trim()) {
+        processPastedCode(text);
+      }
     }
   }
 
@@ -637,13 +649,6 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                     title="コピーしたバーコードを貼り付け"
                   >
                     <Clipboard size={24} />
-                  </button>
-                  <button
-                    onClick={() => setShowTenkey(true)}
-                    className="p-4 bg-white/20 backdrop-blur-xl border border-white/30 hover:bg-white/30 text-white rounded-2xl active:scale-95 transition-all flex items-center justify-center shrink-0"
-                    title="テンキーを入力する"
-                  >
-                    <Keyboard size={24} />
                   </button>
                 </div>
               </div>
