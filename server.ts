@@ -2,9 +2,131 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { fileURLToPath } from "url";
+import { GoogleGenAI, Type } from "@google/genai";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize Gemini Client using the modern @google/genai SDK
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
+
+// Local in-memory cache to save lookup API calls, speed up scans, and protect quota limit
+const janCache = new Map<string, { productName: string; maker: string | null; imageUrl: string | null }>();
+
+// Helper: Query Gemini to find product by JAN code (Google Search Grounding with pure parametric fallback)
+async function findProductWithGemini(janCode: string) {
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn("GEMINI_API_KEY is not configured. Cannot perform Gemini Search fallback.");
+    return null;
+  }
+
+  // Attempt 1: Search Grounding (Very precise, handles new, niche, or specific products)
+  try {
+    console.log(`[Gemini Fallback - Attempt 1] Looking up JAN code: ${janCode} via Google Search Grounding...`);
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: `JANコード（バーコード番号）: ${janCode} に完全に一致する、日本国内で販売されている既製品の正確な商品名とメーカー名（またはブランド名）を特定してください。
+日本第一の市場に合わせて特定し、容量・パック本数などの仕様情報があれば商品名に含めてください。
+実在する商品でない場合は、productNameとmakerの両方にnullを設定してください。`,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            productName: {
+              type: Type.STRING,
+              description: "商品名。特定できない場合は null",
+            },
+            maker: {
+              type: Type.STRING,
+              description: "メーカー名・ブランド名。特定できない場合は null",
+            },
+          },
+          required: ["productName", "maker"]
+        }
+      }
+    });
+
+    const text = response.text;
+    if (text) {
+      const parsed = JSON.parse(text);
+      if (parsed.productName && parsed.productName !== "null") {
+        console.log(`[Gemini Fallback - Attempt 1 Success]: ${parsed.productName} (${parsed.maker})`);
+        return {
+          productName: parsed.productName,
+          maker: parsed.maker || null,
+          imageUrl: null
+        };
+      }
+    }
+  } catch (err: any) {
+    console.error("Gemini search grounding error (Attempt 1 failed):", err?.message || err);
+    // Continue directly to Attempt 2
+  }
+
+  // Attempt 2: Parametric Fallback without tools (bypasses search grounding quota limits and 429 errors)
+  try {
+    console.log(`[Gemini Fallback - Attempt 2] Running pure parametric model lookup for JAN code: ${janCode} to bypass search tool quota limits...`);
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: `あなたは熟練した日本の流通・EC商品データベース検索機です。
+JANコード（バーコード番号）: ${janCode} に1対1で対応する実在する日本の商品情報（具体的な商品名とメーカー名・ブランド名）を、あなたのデータベース知識から推測・検索してください。
+JANの事業者コード等から判断して最も確度が高い商品名を出力してください。容量や仕様の情報も加え、すべて日本語で構成してください。
+
+レスポンスは必ず以下のJSONスキーマに従ってください：
+{
+  "productName": "特定した商品名（例：サントリー伊右衛門 500ml）",
+  "maker": "メーカー名またはブランド名（例：サントリー）"
+}
+どうしても特定できないか自信がない場合のみ、両方を null にしてください。`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            productName: {
+              type: Type.STRING,
+              description: "商品名。特定できない場合は null",
+            },
+            maker: {
+              type: Type.STRING,
+              description: "メーカー名・ブランド名。特定できない場合は null",
+            },
+          },
+          required: ["productName", "maker"]
+        }
+      }
+    });
+
+    const text = response.text;
+    if (text) {
+      const parsed = JSON.parse(text);
+      if (parsed.productName && parsed.productName !== "null") {
+        console.log(`[Gemini Fallback - Attempt 2 Success]: ${parsed.productName} (${parsed.maker})`);
+        return {
+          productName: parsed.productName,
+          maker: parsed.maker || null,
+          imageUrl: null
+        };
+      }
+    }
+  } catch (fallbackErr: any) {
+    console.error("Gemini pure parametric search error:", fallbackErr?.message || fallbackErr);
+  }
+
+  return null;
+}
 
 async function startServer() {
   const app = express();
@@ -12,55 +134,85 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Proxy endpoint for Yahoo! Shopping API
+  // Proxy endpoint for Yahoo! Shopping API with Gemini Search Grounding Fallback
   app.get("/api/product/:janCode", async (req, res) => {
     const { janCode } = req.params;
     const appId = process.env.YAHOO_APP_ID;
 
-    if (!appId) {
-      return res.status(500).json({ error: "YAHOO_APP_ID is not configured" });
+    // 0. Check in-memory Cache first to preserve quota and improve speed
+    if (janCache.has(janCode)) {
+      const cached = janCache.get(janCode);
+      console.log(`[Cache Hit] Returning cached product details for ${janCode}:`, cached);
+      return res.json(cached);
     }
 
-    try {
-      const url = `https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?appid=${appId}&jan_code=${janCode}`;
-      const response = await fetch(url);
-      const data = (await response.json()) as any;
+    // Helper to try Yahoo! Shopping API
+    const tryYahooShopping = async (): Promise<any | null> => {
+      if (!appId || appId === "YOUR_YAHOO_APP_ID" || appId.trim() === "") {
+        console.warn("YAHOO_APP_ID is not configured. Skipping Yahoo Shopping API.");
+        return null;
+      }
+      try {
+        const url = `https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?appid=${appId}&jan_code=${janCode}`;
+        const yahooRes = await fetch(url);
+        if (!yahooRes.ok) return null;
+        const data = (await yahooRes.json()) as any;
 
-      if (data.hits && data.hits.length > 0) {
-        const item = data.hits[0];
-        const rawName = item.name || "";
-        
-        // Find the first occurrence of a space (half-width or full-width)
-        const spaceMatch = rawName.match(/[\s　]/);
-        let maker = item.brand?.name || null;
-        let productName = rawName;
+        if (data.hits && data.hits.length > 0) {
+          const item = data.hits[0];
+          const rawName = item.name || "";
+          
+          const spaceMatch = rawName.match(/[\s　]/);
+          let maker = item.brand?.name || null;
+          let productName = rawName;
 
-        if (spaceMatch && spaceMatch.index !== undefined) {
-          maker = rawName.substring(0, spaceMatch.index).trim();
-          productName = rawName.substring(spaceMatch.index + 1).trim();
+          if (spaceMatch && spaceMatch.index !== undefined) {
+            maker = rawName.substring(0, spaceMatch.index).trim();
+            productName = rawName.substring(spaceMatch.index + 1).trim();
+          }
+
+          const cleanProductName = (name: string): string => {
+            if (!name) return "";
+            let cleaned = name;
+            cleaned = cleaned.replace(/[\s　]*[\[\(（][\s　]*[xX×✕✖][\s　]*[0-9０-９]+(?:[a-zA-Z本個コ袋缶つケースパックセット入り数ロール枚足組箱]*)[\]\)）]/gi, "");
+            cleaned = cleaned.replace(/[\s　]*[xX×✕✖][\s　]*[0-9０-９]+(?:[a-zA-Z本個コ袋缶つケースパックセット入り数ロール枚足組箱]*)/gi, "");
+            return cleaned.trim();
+          };
+
+          return {
+            productName: cleanProductName(productName),
+            imageUrl: item.image?.medium || null,
+            maker: maker,
+          };
         }
+      } catch (e) {
+        console.error("Yahoo API lookup error:", e);
+      }
+      return null;
+    };
 
-        // Clean product name from multiplier expressions like "×[number][unit]" (e.g. ×24, ×24本, x12)
-        const cleanProductName = (name: string): string => {
-          if (!name) return "";
-          let cleaned = name;
-          // Match bracketed multiplier first: (×24), （×24本）, [×24], etc.
-          cleaned = cleaned.replace(/[\s　]*[\[\(（][\s　]*[xX×✕✖][\s　]*[0-9０-９]+(?:[a-zA-Z本個コ袋缶つケースパックセット入り数ロール枚足組箱]*)[\]\)）]/gi, "");
-          // Match standard multiplier: ×24, × 24本, x12, etc.
-          cleaned = cleaned.replace(/[\s　]*[xX×✕✖][\s　]*[0-9０-９]+(?:[a-zA-Z本個コ袋缶つケースパックセット入り数ロール枚足組箱]*)/gi, "");
-          return cleaned.trim();
-        };
+    try {
+      // 1. First, attempt to search using Yahoo! Shopping API
+      let product = await tryYahooShopping();
 
-        res.json({
-          productName: cleanProductName(productName),
-          imageUrl: item.image?.medium,
-          maker: maker,
-        });
+      // 2. If not found or if Yahoo API was skipped / failed, use Gemini as fallback
+      if (!product) {
+        console.log(`Product not found via Yahoo API (or API skipped/disabled). Attempting Gemini Search/Parametric lookups for ${janCode}...`);
+        const geminiProduct = await findProductWithGemini(janCode);
+        if (geminiProduct) {
+          product = geminiProduct;
+        }
+      }
+
+      // 3. Save to cache and return response or 404
+      if (product) {
+        janCache.set(janCode, product);
+        return res.json(product);
       } else {
-        res.status(404).json({ error: "Product not found" });
+        return res.status(404).json({ error: "Product not found across references." });
       }
     } catch (error) {
-      console.error("Yahoo API Error:", error);
+      console.error("API Route Error:", error);
       res.status(500).json({ error: "Failed to fetch product data" });
     }
   });

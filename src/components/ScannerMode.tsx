@@ -12,6 +12,8 @@ interface ScannerModeProps {
 export default function ScannerMode({ onBack }: ScannerModeProps) {
   const [scannedCode, setScannedCode] = useState<string | null>(null);
   const [productInfo, setProductInfo] = useState<{ productName: string; imageUrl?: string; maker?: string } | null>(null);
+  const [editableProductName, setEditableProductName] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
   const [quantity, setQuantity] = useState('1');
   const [unit, setUnit] = useState('個');
   const [subcategory, setSubcategory] = useState('通常');
@@ -125,6 +127,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     if (!searchedCandidateCode || !candidateProduct) return;
     setScannedCode(searchedCandidateCode);
     setProductInfo(candidateProduct);
+    setEditableProductName(candidateProduct.productName);
     setShowTenkey(false);
     
     if (scannerRef.current && scannerRef.current.isScanning) {
@@ -272,6 +275,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
       const standardProd = await findStandardProduct(janCode);
       if (standardProd) {
         setProductInfo(standardProd);
+        setEditableProductName(standardProd.productName);
         return;
       }
 
@@ -280,12 +284,17 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
       if (res.ok) {
         const data = await res.json();
         setProductInfo(data);
+        setEditableProductName(data.productName);
       } else {
-        setProductInfo({ productName: `不明な商品 (${janCode})` });
+        const defaultName = `不明な商品 (${janCode})`;
+        setProductInfo({ productName: defaultName });
+        setEditableProductName(defaultName);
         setManualCode(janCode);
       }
     } catch (err) {
-      setProductInfo({ productName: `検索エラー (${janCode})` });
+      const errorName = `検索エラー (${janCode})`;
+      setProductInfo({ productName: errorName });
+      setEditableProductName(errorName);
       setManualCode(janCode);
     } finally {
       setIsSearching(false);
@@ -299,7 +308,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     try {
       await addDoc(collection(db, 'replenishment_list'), {
         janCode: scannedCode,
-        productName: productInfo.productName,
+        productName: (editableProductName || productInfo.productName).trim(),
         maker: productInfo.maker || null,
         imageUrl: productInfo.imageUrl || null,
         quantity: quantity.trim(),
@@ -327,7 +336,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     try {
       await addDoc(collection(db, 'standard_items'), {
         janCode: scannedCode,
-        name: productInfo.productName,
+        name: (editableProductName || productInfo.productName).trim(),
         maker: productInfo.maker || null,
         createdAt: serverTimestamp(),
       });
@@ -374,6 +383,18 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         >
           <ArrowLeft size={24} />
         </button>
+
+        {/* Floating Help Trigger when scanning */}
+        {!scannedCode && isPermissionGranted && !errorHeader && (
+          <button 
+            onClick={() => setShowHelp(true)} 
+            className="p-3 bg-black/40 backdrop-blur-md text-yellow-300 hover:text-yellow-200 border border-yellow-300/20 rounded-full pointer-events-auto active:scale-90 transition-all flex items-center gap-1.5 shadow-lg"
+            title="スキャンを成功させるコツと説明"
+          >
+            <AlertCircle size={20} />
+            <span className="text-[11px] font-black tracking-wider pr-1">コツ・お困りですか？</span>
+          </button>
+        )}
         
         {errorHeader && (
            <button 
@@ -440,8 +461,23 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         {/* Invisible scanner area */}
         {!scannedCode && !errorHeader && isPermissionGranted && (
           <>
-            <div className="absolute inset-0 pointer-events-none z-10">
-              {/* No visible guides as requested */}
+            <div className="absolute inset-x-0 top-24 pointer-events-none z-10 flex flex-col items-center px-6">
+              <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-4 text-center max-w-xs space-y-1.5 shadow-xl animate-pulse" style={{ animationDuration: '4s' }}>
+                <p className="text-sm font-black text-white flex items-center justify-center gap-2">
+                  <span className="inline-block w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+                  バーコードスキャン待機中...
+                </p>
+                <p className="text-[10.5px] font-bold text-gray-300 leading-normal">
+                  バーコードから<strong>15〜20cmほど離し</strong>、中央の枠内に水平に合わせて写してください。
+                </p>
+              </div>
+
+              <div className="mt-3 bg-blue-950/70 backdrop-blur-sm border border-blue-500/20 rounded-xl px-4 py-2.5 text-center max-w-xs shadow-lg">
+                <p className="text-[10px] font-bold text-blue-300 leading-relaxed">
+                  💡 <strong>うまく認識しなくてもOK！</strong><br />
+                  読み取った後に、商品名はご自身で自由に変更・入力可能です。
+                </p>
+              </div>
             </div>
             
             {/* Manual Entry UI */}
@@ -534,10 +570,31 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                       {productInfo.maker}
                     </span>
                   )}
-                  <h3 className="text-lg font-bold text-gray-900 leading-tight">
-                    {isSearching ? "商品情報を取得中..." : productInfo?.productName}
-                  </h3>
-                  {scannedCode !== 'STANDARD' && productInfo && !isSearching && (
+                  {isSearching ? (
+                    <h3 className="text-lg font-bold text-gray-900 leading-tight">
+                      商品情報を取得中...
+                    </h3>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] text-gray-400 font-black uppercase tracking-wider pl-0.5">商品名 (タップして編集可能)</label>
+                      <input
+                        type="text"
+                        value={editableProductName}
+                        onChange={(e) => setEditableProductName(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 text-gray-950 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none font-bold text-sm"
+                        placeholder="商品名を手動で変更..."
+                      />
+                    </div>
+                  )}
+                  {productInfo && !isSearching && (editableProductName.includes('不明な商品') || editableProductName.includes('検索エラー') || editableProductName.trim() === '') && (
+                    <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[10px] font-bold leading-normal flex items-start gap-1.5 shadow-sm">
+                      <AlertCircle size={15} className="shrink-0 text-amber-600 mt-0.5" />
+                      <div>
+                        事業者バーコード制限や新商品の場合、商品名が一時的に特定できないことがあります。お手数ですが、上の入力欄をタップして<strong>正しい商品名に書き換えて</strong>送信してください。
+                      </div>
+                    </div>
+                  )}
+                  {scannedCode !== 'STANDARD' && productInfo && !isSearching && !editableProductName.includes('不明な商品') && !editableProductName.includes('検索エラー') && (
                     <button 
                       onClick={handleRegisterStandard}
                       disabled={isRegisteringStandard}
@@ -796,6 +853,99 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                 >
                   コードで検索
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showHelp && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowHelp(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            />
+            
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="relative w-full max-w-md bg-zinc-900 border border-zinc-850 rounded-3xl p-6 shadow-2xl z-10 text-left overflow-y-auto max-h-[85vh]"
+            >
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-805">
+                <h3 className="text-sm font-black text-amber-300 flex items-center gap-2">
+                  <AlertCircle size={20} />
+                  スキャン成功のコツ＆説明書
+                </h3>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-full transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs text-zinc-300 leading-relaxed font-sans">
+                
+                {/* Section 1 */}
+                <div className="space-y-2">
+                  <h4 className="font-bold text-white text-xs flex items-center gap-1.5">
+                    <span className="w-1.5 h-3 bg-blue-500 rounded" />
+                    1. カメラに写す際の3つのポイント
+                  </h4>
+                  <ul className="list-disc list-inside pl-1 space-y-1.5 text-zinc-400 font-medium">
+                    <li>
+                      <strong className="text-zinc-200">【距離は15〜20cm】</strong> 近すぎるとカメラのピントが合いません。手のひら1つ分ほど離してください。
+                    </li>
+                    <li>
+                      <strong className="text-zinc-200">【水平に合わせる】</strong> バーコードが斜めになっていないか確認し、枠に対して直角・水平に合わせてください。
+                    </li>
+                    <li>
+                      <strong className="text-zinc-200">【光の反射を防ぐ】</strong> 蛍光灯などの強い光がバーコードの上に置かれるようであれば、スマホをほんの数度傾けてきれいに撮影してください。
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Section 2 */}
+                <div className="space-y-2">
+                  <h4 className="font-bold text-white text-xs flex items-center gap-1.5">
+                    <span className="w-1.5 h-3 bg-emerald-500 rounded" />
+                    2. 「不明な商品」や検索に失敗したら？
+                  </h4>
+                  <p className="text-zinc-400 pl-3">
+                    新発売された商品、ネット通販、一部の海外製品などは検索APIやAI（Gemini）で見つからず、<strong>「不明な商品」</strong>と表示されることがあります。
+                  </p>
+                  <p className="pl-3 py-1 px-2.5 bg-yellow-950/20 border border-yellow-500/10 rounded-xl text-yellow-300 text-[10.5px] font-bold">
+                    💡 <strong>ご安心ください！</strong><br />
+                    不明な商品と出ても、そのポップアップから商品名入力欄をタップして「お好きな名前（例: 水 2L ケース）」に<strong>自由に変更・修正して送信可能</strong>です！そのままリクエストがきちんと送信されます。
+                  </p>
+                </div>
+
+                {/* Section 3 */}
+                <div className="space-y-2">
+                  <h4 className="font-bold text-white text-xs flex items-center gap-1.5">
+                    <span className="w-1.5 h-3 bg-purple-500 rounded" />
+                    3. コピペや手入力の裏ワザ
+                  </h4>
+                  <p className="text-zinc-400 pl-3 leading-normal">
+                    カメラが使えない場合やうまく撮影できない場合は、画面下の入力フォーム、または右端の<strong>貼り付け(📋)ボタン</strong>をお使いください。他のメールやアプリからコピーしたJANコードの数値をワンタップで自動入力、テンキーでの入力時もリアルタイムで裏で自動検索されます。
+                  </p>
+                </div>
+
+                {/* Confirm button */}
+                <div className="pt-4 flex justify-end">
+                  <button
+                    onClick={() => setShowHelp(false)}
+                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black rounded-xl active:scale-95 transition-all text-center tracking-widest text-xs uppercase"
+                  >
+                    閉じてスキャンを続ける
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
