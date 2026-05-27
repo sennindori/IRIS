@@ -6,3 +6,33 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-condensed: "Oswald", sans-serif;
 }
+
+/* Global resets to ensure no horizontal scrollbar on any device/screen */
+html, body {
+  max-width: 100% !important;
+  width: 100%;
+  overflow-x: hidden !important;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-text-size-adjust: 100%;
+}
+
+*, *:before, *:after {
+  box-sizing: border-box;
+}
+
+/* 
+   Stop zoom on focus in iOS Safari by setting font-size of 
+   form controls to at least 16px (1rem).
+*/
+input, select, textarea {
+  font-size: 16px !important;
+}
+
+/* Target input/select/textarea specifically on focus if needed */
+input:focus, select:focus, textarea:focus {
+  font-size: 16px !important;
+  outline: none;
+}
+

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import JsBarcode from 'jsbarcode';
 import { 
   ArrowLeft, 
   Search, 
@@ -35,6 +36,58 @@ interface MasterModeProps {
   onBack: () => void;
 }
 
+// Custom Barcode Generator helper component
+interface BarcodeGeneratorProps {
+  val: string;
+}
+
+function BarcodeGenerator({ val }: BarcodeGeneratorProps) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (svgRef.current && val) {
+      try {
+        setError(false);
+        // JAN codes in Japan are usually EAN-13 or EAN-8
+        const isEan13 = val.length === 13 && /^\d+$/.test(val);
+        const isEan8 = val.length === 8 && /^\d+$/.test(val);
+        const format = isEan13 ? "EAN13" : isEan8 ? "EAN8" : "CODE128";
+
+        JsBarcode(svgRef.current, val, {
+          format: format,
+          lineColor: "#000000",
+          width: 2.2,
+          height: 100,
+          displayValue: true,
+          fontOptions: "bold",
+          fontSize: 16,
+          background: "#ffffff",
+          margin: 15
+        });
+      } catch (err) {
+        console.error("Barcode generation failed:", err);
+        setError(true);
+      }
+    }
+  }, [val]);
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center p-6 bg-red-950/20 border border-red-900/40 rounded-2xl text-red-400 gap-2">
+        <AlertCircle size={24} />
+        <p className="text-xs font-bold font-mono">バーコード生成エラー ({val})</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-100 flex items-center justify-center overflow-x-auto max-w-full">
+      <svg ref={svgRef} className="max-w-full"></svg>
+    </div>
+  );
+}
+
 export default function MasterMode({ onBack }: MasterModeProps) {
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<ProductMasterItem[]>([]);
@@ -61,6 +114,9 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   // Delete confirm state
   const [deletingItem, setDeletingItem] = useState<ProductMasterItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Barcode Popup State
+  const [barcodeItem, setBarcodeItem] = useState<ProductMasterItem | null>(null);
 
   // Real-time Master DB listener
   useEffect(() => {
@@ -359,8 +415,12 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 text-left min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                          <span className="text-xs font-black font-mono tracking-tight text-gray-300 bg-gray-800 px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-sm border border-gray-750">
-                            <Barcode size={11} className="text-blue-400" />
+                          <span 
+                            onClick={() => setBarcodeItem(item)}
+                            className="text-xs font-black font-mono tracking-tight text-gray-300 bg-gray-800 hover:bg-gray-700 hover:text-white px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm border border-gray-700 cursor-pointer active:scale-95 transition-all"
+                            title="クリックしてバーコードを表示"
+                          >
+                            <Barcode size={12} className="text-blue-400 animate-pulse" />
                             {item.janCode}
                           </span>
                           {item.maker && (
@@ -610,6 +670,68 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                   完全に削除
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* BARCODE POPUP INTERFACE */}
+      <AnimatePresence>
+        {barcodeItem && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setBarcodeItem(null)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 210 }}
+              className="relative w-full max-w-sm bg-gray-900 border border-gray-800 rounded-[32px] p-6 shadow-2xl z-10 text-center overflow-hidden"
+            >
+              <button
+                onClick={() => setBarcodeItem(null)}
+                className="absolute right-4 top-4 p-2 bg-gray-800 hover:bg-gray-750 text-gray-400 hover:text-white rounded-full transition-colors active:scale-95"
+                title="閉じる"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="mb-4 text-left">
+                <span className="text-[10px] bg-blue-905 border border-blue-900/60 text-blue-400 px-3 py-1 rounded-full font-black uppercase tracking-wider">
+                  JANバーコード表示
+                </span>
+                <h3 className="text-sm font-black text-white leading-tight mt-3">
+                  {barcodeItem.productName}
+                </h3>
+                {(barcodeItem.maker || barcodeItem.size) && (
+                  <p className="text-[11px] text-gray-400 font-bold mt-1.5 flex gap-2">
+                    {barcodeItem.maker && <span>{barcodeItem.maker}</span>}
+                    {barcodeItem.size && <span>• {barcodeItem.size}</span>}
+                  </p>
+                )}
+              </div>
+
+              {/* Barcode SVG generation */}
+              <div className="my-6">
+                <BarcodeGenerator val={barcodeItem.janCode} />
+              </div>
+
+              <div className="text-[10px] text-gray-400 font-bold leading-normal bg-gray-950 p-3 rounded-2xl border border-gray-850">
+                <p>💡 スマートフォン画面の明るさを上げて、ハンディスキャナー等にかざして読み取ることができます。</p>
+              </div>
+
+              <button
+                onClick={() => setBarcodeItem(null)}
+                className="w-full mt-5 py-3.5 bg-gray-800 hover:bg-gray-750 text-white font-black rounded-2xl text-xs active:scale-[0.98] transition-all"
+              >
+                閉じる
+              </button>
             </motion.div>
           </div>
         )}
