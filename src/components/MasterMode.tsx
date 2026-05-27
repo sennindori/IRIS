@@ -118,6 +118,50 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   // Barcode Popup State
   const [barcodeItem, setBarcodeItem] = useState<ProductMasterItem | null>(null);
 
+  // Standard items state and listener
+  const [standardItems, setStandardItems] = useState<any[]>([]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'standard_items'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setStandardItems(data);
+    }, (error) => {
+      console.error("Failed to fetch standard items:", error);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Register an item to standard list
+  async function handleRegisterToStandard(item: ProductMasterItem) {
+    try {
+      await addDoc(collection(db, 'standard_items'), {
+        name: item.productName,
+        maker: item.maker || null,
+        janCode: item.janCode,
+        createdAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error("Failed to register standard item:", err);
+      alert("定番登録に失敗しました。");
+    }
+  }
+
+  // Remove an item from standard list
+  async function handleRemoveFromStandard(item: ProductMasterItem) {
+    const matched = standardItems.find(std => std.janCode === item.janCode);
+    if (!matched) return;
+    try {
+      await deleteDoc(doc(db, 'standard_items', matched.id));
+    } catch (err) {
+      console.error("Failed to remove standard item:", err);
+      alert("定番解除に失敗しました。");
+    }
+  }
+
   // Real-time Master DB listener
   useEffect(() => {
     const q = query(collection(db, 'product_master'), orderBy('createdAt', 'desc'));
@@ -446,6 +490,29 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                             <span>{item.remarks}</span>
                           </p>
                         )}
+
+                        {/* 定番マスタへの登録・解除ボタン */}
+                        <div className="mt-2.5 flex items-center">
+                          {standardItems.some((std) => std.janCode === item.janCode) ? (
+                            <button
+                              onClick={() => handleRemoveFromStandard(item)}
+                              className="px-2 py-0.5 bg-emerald-950/45 text-emerald-400 hover:bg-emerald-900/40 border border-emerald-900/40 text-[9px] font-black rounded-md flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                              title="クリックして定番マスタから解除"
+                            >
+                              <Check size={10} />
+                              定番登録済み
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleRegisterToStandard(item)}
+                              className="px-2 py-0.5 bg-gray-800 hover:bg-gray-750 text-gray-450 hover:text-white border border-gray-700/60 text-[9px] font-black rounded-md flex items-center gap-0.5 transition-all active:scale-95 cursor-pointer"
+                              title="クリックして定番マスタに登録"
+                            >
+                              <Plus size={10} />
+                              定番マスタに登録
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex flex-col gap-1.5 shrink-0 justify-end">

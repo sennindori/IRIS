@@ -751,16 +751,6 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                       </div>
                     </div>
                   )}
-                  {scannedCode !== 'STANDARD' && productInfo && !isSearching && !editableProductName.includes('不明な商品') && !editableProductName.includes('検索エラー') && (
-                    <button 
-                      onClick={handleRegisterStandard}
-                      disabled={isRegisteringStandard}
-                      className="mt-2 text-[10px] items-center gap-1 flex font-black text-blue-600 hover:text-blue-700 active:scale-95 transition-all"
-                    >
-                      {isRegisteringStandard ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
-                      スタンダードリストに登録
-                    </button>
-                  )}
                 </div>
               </div>
 
