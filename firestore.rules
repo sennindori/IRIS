@@ -37,12 +37,29 @@ service cloud.firestore {
         && (data.get('createdAt', request.time) is timestamp);
     }
 
+    function isValidProductMasterItem(data) {
+      return (data.get('janCode', '') is string)
+        && (data.get('productName', '') is string)
+        && (data.get('maker', null) == null || data.get('maker', '') is string)
+        && (data.get('size', null) == null || data.get('size', '') is string)
+        && (data.get('remarks', null) == null || data.get('remarks', '') is string)
+        && (data.get('createdAt', request.time) is timestamp);
+    }
+
     match /replenishment_list/{itemId} {
       allow read: if true;
       allow create: if isValidReplenishmentItem(request.resource.data) 
                     && request.resource.data.status == 'pending'
                     && request.resource.data.createdAt == request.time;
       allow update: if isValidReplenishmentItem(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /product_master/{itemId} {
+      allow read: if true;
+      allow create: if isValidProductMasterItem(request.resource.data)
+                    && request.resource.data.createdAt == request.time;
+      allow update: if isValidProductMasterItem(request.resource.data);
       allow delete: if true;
     }
 

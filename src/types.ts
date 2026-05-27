@@ -14,7 +14,17 @@ export interface ReplenishmentItem {
   subcategory?: string; // サブカテゴリ (売場 - 通常, 催事, エンド, その他)
 }
 
-export type AppMode = 'menu' | 'scan' | 'view' | 'edit' | 'quick' | 'bbs';
+export interface ProductMasterItem {
+  id: string;
+  janCode: string;
+  productName: string;
+  maker?: string;
+  size?: string;
+  remarks?: string;
+  createdAt: any;
+}
+
+export type AppMode = 'menu' | 'scan' | 'view' | 'edit' | 'quick' | 'bbs' | 'master';
 
 export interface BbsReply {
   id: string;

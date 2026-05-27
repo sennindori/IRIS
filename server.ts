@@ -138,9 +138,10 @@ async function startServer() {
   app.get("/api/product/:janCode", async (req, res) => {
     const { janCode } = req.params;
     const appId = process.env.YAHOO_APP_ID;
+    const forceSearch = req.query.forceSearch === "true";
 
-    // 0. Check in-memory Cache first to preserve quota and improve speed
-    if (janCache.has(janCode)) {
+    // 0. Check in-memory Cache first to preserve quota and improve speed (unless forced)
+    if (janCache.has(janCode) && !forceSearch) {
       const cached = janCache.get(janCode);
       console.log(`[Cache Hit] Returning cached product details for ${janCode}:`, cached);
       return res.json(cached);

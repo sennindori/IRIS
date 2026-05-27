@@ -42,12 +42,30 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "When the reply was sent." }
       },
       "required": ["author", "content", "createdAt"]
+    },
+    "ProductMasterItem": {
+      "title": "Product Master Item",
+      "description": "Represents product details mapped by JAN code in the product master database.",
+      "type": "object",
+      "properties": {
+        "janCode": { "type": "string", "description": "The barcode (JAN code) of the product." },
+        "productName": { "type": "string", "description": "The name of the product." },
+        "maker": { "type": "string", "description": "The manufacturer or brand of the product." },
+        "size": { "type": "string", "description": "The size, capacity, weight, or dimensions of the product." },
+        "remarks": { "type": "string", "description": "Any additional notes, remarks, or specification details." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the product was added to master." }
+      },
+      "required": ["janCode", "productName", "createdAt"]
     }
   },
   "firestore": {
     "/replenishment_list/{itemId}": {
       "schema": "ReplenishmentItem",
       "description": "Collection of all replenishment requests."
+    },
+    "/product_master/{itemId}": {
+      "schema": "ProductMasterItem",
+      "description": "Master list of products mapped by JAN code."
     },
     "/bbs_messages/{messageId}": {
       "schema": "BbsMessage",

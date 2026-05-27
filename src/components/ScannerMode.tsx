@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { db } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
-import { ArrowLeft, Loader2, Send, CheckCircle2, Scan, AlertCircle, RefreshCw, Plus, Search, Keyboard, X, Delete, Clipboard } from 'lucide-react';
+import { collection, addDoc, updateDoc, doc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
+import { ArrowLeft, Loader2, Send, CheckCircle2, Scan, AlertCircle, RefreshCw, Plus, Search, Keyboard, X, Delete, Clipboard, Database, Save, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ScannerModeProps {
@@ -20,7 +20,13 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   const [manualCode, setManualCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   const [isRegisteringStandard, setIsRegisteringStandard] = useState(false);
+  const [editableMaker, setEditableMaker] = useState('');
+  const [masterSize, setMasterSize] = useState('');
+  const [masterRemarks, setMasterRemarks] = useState('');
+  const [isRegisteringMaster, setIsRegisteringMaster] = useState(false);
+  const [masterRegisterSuccess, setMasterRegisterSuccess] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [errorHeader, setErrorHeader] = useState<string | null>(null);
   const [showTenkey, setShowTenkey] = useState(false);
@@ -78,6 +84,31 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
       }
     } catch (err) {
       console.error("Firestore standard_items lookup error:", err);
+    }
+    return null;
+  }
+
+  // 商品マスタ商品 (product_master) から JANコード で検索するヘルパー関数
+  async function findMasterProduct(janCode: string) {
+    try {
+      const q = query(
+        collection(db, 'product_master'),
+        where('janCode', '==', janCode),
+        limit(1)
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const docData = snapshot.docs[0].data();
+        return {
+          productName: docData.productName as string,
+          maker: docData.maker || undefined,
+          size: docData.size || undefined,
+          remarks: docData.remarks || undefined,
+          imageUrl: undefined
+        };
+      }
+    } catch (err) {
+      console.error("Firestore product_master lookup error:", err);
     }
     return null;
   }
@@ -270,34 +301,90 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
 
   async function fetchProductInfo(janCode: string) {
     setIsSearching(true);
+    // Reset any previous master register states
+    setEditableMaker('');
+    setMasterSize('');
+    setMasterRemarks('');
+    setMasterRegisterSuccess(false);
+
     try {
-      // 1. まずは登録済みの定番マスタ (standard_items) からマッチング
+      // 1. まずは本気の商品マスタ (product_master) からマッチング
+      const masterProd = await findMasterProduct(janCode);
+      if (masterProd) {
+        setProductInfo({
+          productName: masterProd.productName,
+          maker: masterProd.maker || undefined
+        });
+        setEditableProductName(masterProd.productName);
+        setEditableMaker(masterProd.maker || '');
+        setMasterSize(masterProd.size || '');
+        setMasterRemarks(masterProd.remarks || '');
+        return;
+      }
+
+      // 2. 次に登録済みの定番マスタ (standard_items) からマッチング
       const standardProd = await findStandardProduct(janCode);
       if (standardProd) {
         setProductInfo(standardProd);
         setEditableProductName(standardProd.productName);
+        setEditableMaker(standardProd.maker || '');
         return;
       }
 
-      // 2. なければYahoo!ショッピングAPIを使用
+      // 3. なければYahoo!ショッピングAPIを使用
       const res = await fetch(`/api/product/${janCode}`);
       if (res.ok) {
         const data = await res.json();
         setProductInfo(data);
         setEditableProductName(data.productName);
+        setEditableMaker(data.maker || '');
       } else {
         const defaultName = `不明な商品 (${janCode})`;
         setProductInfo({ productName: defaultName });
         setEditableProductName(defaultName);
+        setEditableMaker('');
         setManualCode(janCode);
       }
     } catch (err) {
       const errorName = `検索エラー (${janCode})`;
       setProductInfo({ productName: errorName });
       setEditableProductName(errorName);
+      setEditableMaker('');
       setManualCode(janCode);
     } finally {
       setIsSearching(false);
+    }
+  }
+
+  async function handleWebSearch(janCode: string) {
+    if (!janCode) return;
+    setIsSearchingWeb(true);
+    setEditableProductName("ウェブ検索中...");
+    setEditableMaker('');
+    setMasterSize('');
+    setMasterRemarks('');
+    setMasterRegisterSuccess(false);
+
+    try {
+      const res = await fetch(`/api/product/${janCode}?forceSearch=true`);
+      if (res.ok) {
+        const data = await res.json();
+        setProductInfo(data);
+        setEditableProductName(data.productName);
+        setEditableMaker(data.maker || '');
+      } else {
+        const defaultName = `不明な商品 (${janCode})`;
+        setProductInfo({ productName: defaultName });
+        setEditableProductName(defaultName);
+        setEditableMaker('');
+      }
+    } catch (err) {
+      const errorName = `検索エラー (${janCode})`;
+      setProductInfo({ productName: errorName });
+      setEditableProductName(errorName);
+      setEditableMaker('');
+    } finally {
+      setIsSearchingWeb(false);
     }
   }
 
@@ -309,7 +396,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
       await addDoc(collection(db, 'replenishment_list'), {
         janCode: scannedCode,
         productName: (editableProductName || productInfo.productName).trim(),
-        maker: productInfo.maker || null,
+        maker: editableMaker.trim() || productInfo.maker || null,
         imageUrl: productInfo.imageUrl || null,
         quantity: quantity.trim(),
         unit: unit,
@@ -337,7 +424,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
       await addDoc(collection(db, 'standard_items'), {
         janCode: scannedCode,
         name: (editableProductName || productInfo.productName).trim(),
-        maker: productInfo.maker || null,
+        maker: editableMaker.trim() || productInfo.maker || null,
         createdAt: serverTimestamp(),
       });
       alert("スタンダードとして登録しました");
@@ -346,6 +433,47 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
       alert("登録に失敗しました");
     } finally {
       setIsRegisteringStandard(false);
+    }
+  }
+
+  async function handleRegisterMaster() {
+    if (!scannedCode) return;
+    setIsRegisteringMaster(true);
+    setMasterRegisterSuccess(false);
+    try {
+      const q = query(
+        collection(db, 'product_master'),
+        where('janCode', '==', scannedCode),
+        limit(1)
+      );
+      const snapshot = await getDocs(q);
+      
+      const payload = {
+        janCode: scannedCode,
+        productName: (editableProductName || '').trim(),
+        maker: (editableMaker || '').trim() || null,
+        size: (masterSize || '').trim() || null,
+        remarks: (masterRemarks || '').trim() || null,
+      };
+
+      if (!snapshot.empty) {
+        // Update
+        const docId = snapshot.docs[0].id;
+        await updateDoc(doc(db, 'product_master', docId), payload);
+      } else {
+        // Create
+        await addDoc(collection(db, 'product_master'), {
+          ...payload,
+          createdAt: serverTimestamp()
+        });
+      }
+      setMasterRegisterSuccess(true);
+      alert("商品マスタを保存しました");
+    } catch (err) {
+      console.error("Failed to register in product master:", err);
+      alert("商品マスタの登録に失敗しました。");
+    } finally {
+      setIsRegisteringMaster(false);
     }
   }
 
@@ -551,7 +679,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-x-0 bottom-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.2)] rounded-t-[32px] p-6 pb-12 z-50"
+            className="fixed inset-x-0 bottom-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.2)] rounded-t-[32px] p-6 pb-8 z-50 overflow-y-auto max-h-[92dvh]"
           >
             <div className="max-w-md mx-auto">
               {/* Result UI handles here */}
@@ -570,9 +698,10 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                       {productInfo.maker}
                     </span>
                   )}
-                  {isSearching ? (
-                    <h3 className="text-lg font-bold text-gray-900 leading-tight">
-                      商品情報を取得中...
+                  {isSearching || isSearchingWeb ? (
+                    <h3 className="text-sm font-bold text-gray-900 leading-tight flex items-center gap-2 py-2">
+                      <Loader2 className="animate-spin text-blue-600" size={16} />
+                      {isSearchingWeb ? "ウェブを再検索中..." : "商品情報を取得中..."}
                     </h3>
                   ) : (
                     <div className="space-y-1.5">
@@ -586,11 +715,39 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                       />
                     </div>
                   )}
-                  {productInfo && !isSearching && (editableProductName.includes('不明な商品') || editableProductName.includes('検索エラー') || editableProductName.trim() === '') && (
-                    <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[10px] font-bold leading-normal flex items-start gap-1.5 shadow-sm">
-                      <AlertCircle size={15} className="shrink-0 text-amber-600 mt-0.5" />
-                      <div>
-                        事業者バーコード制限や新商品の場合、商品名が一時的に特定できないことがあります。お手数ですが、上の入力欄をタップして<strong>正しい商品名に書き換えて</strong>送信してください。
+                  {productInfo && !isSearching && !isSearchingWeb && (editableProductName.includes('不明な商品') || editableProductName.includes('検索エラー') || editableProductName.trim() === '') && (
+                    <div className="mt-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs font-bold leading-normal space-y-3.5 shadow-sm">
+                      <div className="flex items-start gap-2 text-[11px] leading-relaxed">
+                        <AlertCircle size={16} className="shrink-0 text-amber-600 mt-0.5" />
+                        <div>
+                          商品情報を特定できませんでした。手動で入力するか、下のボタンから<strong>ウェブで自動検索・反映</strong>してください。
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-200/50">
+                        <button
+                          type="button"
+                          onClick={() => handleWebSearch(scannedCode || '')}
+                          disabled={isSearchingWeb}
+                          className="flex items-center justify-center gap-1.5 px-2.5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-black rounded-xl text-[10.5px] uppercase tracking-wide active:scale-[0.98] transition-all shadow-sm"
+                        >
+                          {isSearchingWeb ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <RefreshCw size={13} />
+                          )}
+                          ウェブ自動検索
+                        </button>
+                        
+                        <a
+                          href={`https://www.google.com/search?q=${scannedCode}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-1.5 px-2.5 py-2.5 bg-zinc-800 hover:bg-zinc-900 text-zinc-100 font-black rounded-xl text-[10.5px] uppercase tracking-wide active:scale-[0.98] transition-all shadow-sm index_external_link"
+                        >
+                          <Search size={13} />
+                          Google手動検索
+                        </a>
                       </div>
                     </div>
                   )}
@@ -604,6 +761,71 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                       スタンダードリストに登録
                     </button>
                   )}
+                </div>
+              </div>
+
+              {/* 商品マスタへの登録・更新カード */}
+              <div className="mb-5 p-4 bg-indigo-50 border border-indigo-100/60 rounded-2xl text-left shadow-sm">
+                <h4 className="text-[11px] font-black text-indigo-950 flex items-center gap-1.5 mb-2.5">
+                  <Database size={13} className="text-indigo-600" />
+                  商品マスタへの登録・更新
+                </h4>
+                
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="col-span-2 space-y-1">
+                    <label className="block text-[9px] text-indigo-800 font-black uppercase pl-0.5">メーカー・ブランド</label>
+                    <input
+                      type="text"
+                      value={editableMaker}
+                      onChange={(e) => setEditableMaker(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-indigo-200 text-xs font-bold text-gray-950 outline-none rounded-xl focus:border-indigo-500 transition-colors"
+                      placeholder="例: 花王, コカ・コーラなど"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] text-indigo-800 font-black uppercase pl-0.5">規格・サイズ</label>
+                    <input
+                      type="text"
+                      value={masterSize}
+                      onChange={(e) => setMasterSize(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-indigo-200 text-xs font-bold text-gray-950 outline-none rounded-xl focus:border-indigo-500 transition-colors"
+                      placeholder="例: 500ml, 大袋"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[9px] text-indigo-800 font-black uppercase pl-0.5">マスタ備考</label>
+                    <input
+                      type="text"
+                      value={masterRemarks}
+                      onChange={(e) => setMasterRemarks(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-indigo-200 text-xs font-bold text-gray-950 outline-none rounded-xl focus:border-indigo-500 transition-colors"
+                      placeholder="例: A-1棚、催事用など"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t border-indigo-100 pt-2 px-0.5">
+                  <p className="text-[9px] text-indigo-600 font-extrabold max-w-[200px] leading-snug">
+                    ※マスタへ保存すると次回以降自動でメーカー・サイズ等が補完されます。
+                  </p>
+                  
+                  <button
+                    type="button"
+                    onClick={handleRegisterMaster}
+                    disabled={isRegisteringMaster || !editableProductName.trim()}
+                    className="flex items-center gap-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-black text-[10px] rounded-xl active:scale-95 transition-all shadow-sm shrink-0"
+                  >
+                    {isRegisteringMaster ? (
+                      <Loader2 size={11} className="animate-spin" />
+                    ) : masterRegisterSuccess ? (
+                      <Check size={11} />
+                    ) : (
+                      <Save size={11} />
+                    )}
+                    {masterRegisterSuccess ? '保存完了' : 'マスタに保存'}
+                  </button>
                 </div>
               </div>
 

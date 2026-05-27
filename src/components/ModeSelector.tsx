@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check, Lock, MessageSquare } from 'lucide-react';
+import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check, Lock, MessageSquare, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppMode } from '../types';
 
@@ -49,6 +49,14 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
       color: 'bg-emerald-50 text-emerald-500 border border-emerald-100/70', 
       hoverBg: 'hover:bg-emerald-50/20 hover:border-emerald-100',
       desc: 'スタッフへの連絡事項' 
+    },
+    { 
+      id: 'master' as AppMode, 
+      label: '商品マスタ', 
+      icon: Database, 
+      color: 'bg-indigo-50 text-indigo-500 border border-indigo-100/70', 
+      hoverBg: 'hover:bg-indigo-50/20 hover:border-indigo-100',
+      desc: '商品マスタ情報の閲覧・登録・管理' 
     },
   ];
 

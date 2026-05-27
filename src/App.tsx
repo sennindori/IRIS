@@ -12,6 +12,7 @@ import QuickMode from './components/QuickMode';
 import PasscodeLock from './components/PasscodeLock';
 import UsernameSetup from './components/UsernameSetup';
 import BBSMode from './components/BBSMode';
+import MasterMode from './components/MasterMode';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from './lib/firebase';
@@ -177,6 +178,19 @@ export default function App() {
             className="fixed inset-0 z-50 bg-gray-50"
           >
             <BBSMode onBack={() => setMode('menu')} username={username} />
+          </motion.div>
+        )}
+
+        {mode === 'master' && (
+          <motion.div
+            key="master"
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="fixed inset-0 z-50 bg-gray-950"
+          >
+            <MasterMode onBack={() => setMode('menu')} />
           </motion.div>
         )}
       </AnimatePresence>
