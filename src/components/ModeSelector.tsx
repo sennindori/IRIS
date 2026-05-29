@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check, Lock, MessageSquare, Database } from 'lucide-react';
+import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check, Lock, MessageSquare, Database, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppMode } from '../types';
 
@@ -25,6 +25,14 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
       color: 'bg-red-50 text-red-500 border border-red-100/70', 
       hoverBg: 'hover:bg-red-50/20 hover:border-red-100',
       desc: 'スキャンまたは手入力で補充依頼' 
+    },
+    { 
+      id: 'quick' as AppMode, 
+      label: 'STD発注', 
+      icon: Star, 
+      color: 'bg-amber-50 text-amber-500 border border-amber-100/70', 
+      hoverBg: 'hover:bg-amber-50/20 hover:border-amber-100',
+      desc: '定番商品リストからの簡易補充依頼' 
     },
     { 
       id: 'view' as AppMode, 

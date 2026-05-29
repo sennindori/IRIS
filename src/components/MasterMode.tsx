@@ -17,7 +17,11 @@ import {
   Clipboard,
   Check,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Download,
+  Upload,
+  Star,
+  Filter
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { 
@@ -141,6 +145,235 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   }, []);
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [filterOnlyStd, setFilterOnlyStd] = useState(false);
+
+  // CSV Import/Export States
+  const [csvPreviewItems, setCsvPreviewItems] = useState<any[]>([]);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+  const [importProgress, setImportProgress] = useState<{current: number; total: number} | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // CSV line parsing helper handling quotes, escaped quotes, and commas
+  function parseCSVLine(text: string): string[] {
+    const result: string[] = [];
+    let curVal = '';
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === '"') {
+        if (inQuotes && text[i + 1] === '"') {
+          curVal += '"';
+          i++; // skip next quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(curVal);
+        curVal = '';
+      } else {
+        curVal += char;
+      }
+    }
+    result.push(curVal);
+    return result;
+  }
+
+  // Handle export to CSV
+  function handleCsvExport() {
+    if (items.length === 0) {
+      alert("エクスポートする商品マスタがありません。");
+      return;
+    }
+
+    try {
+      const csvContent = "\uFEFF" + [ // Add BOM for Excel compatibility in Japanese encoding
+        ['JANコード', '商品名', 'メーカー', 'サイズ', '単位', '備考'].join(','),
+        ...items.map(item => [
+          `"${(item.janCode || '').replace(/"/g, '""')}"`,
+          `"${(item.productName || '').replace(/"/g, '""')}"`,
+          `"${(item.maker || '').replace(/"/g, '""')}"`,
+          `"${(item.size || '').replace(/"/g, '""')}"`,
+          `"${(item.unit || '').replace(/"/g, '""')}"`,
+          `"${(item.remarks || '').replace(/"/g, '""')}"`,
+        ].join(','))
+      ].join('\r\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/T/, '_').replace(/:/g, '-').slice(0, 19);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `商品マスタ_${timestamp}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("CSV Export failed:", err);
+      alert("CSVのエクスポートに失敗しました。");
+    }
+  }
+
+  // Handle CSV file selection and preparation
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset value so same file can be uploaded again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+      parseCSV(text);
+    };
+    reader.onerror = () => {
+      alert("ファイルの読み込みに失敗しました。");
+    };
+    reader.readAsText(file);
+  }
+
+  // Parse CSV text and show preview
+  function parseCSV(text: string) {
+    const lines = text.split(/\r?\n/);
+    if (lines.length === 0 || !lines[0]) {
+      alert("CSVファイルが空です。");
+      return;
+    }
+
+    // Parse headers
+    const headerRow = parseCSVLine(lines[0]);
+    
+    // Find matching columns
+    let janIdx = -1;
+    let nameIdx = -1;
+    let makerIdx = -1;
+    let sizeIdx = -1;
+    let unitIdx = -1;
+    let remarksIdx = -1;
+
+    headerRow.forEach((h, index) => {
+      const headerStr = h.trim().toLowerCase();
+      if (['janコード', 'janコード(品番)', 'jancode', 'jan', 'jan_code', '品番', 'コード', 'barcode'].includes(headerStr)) {
+        janIdx = index;
+      } else if (['商品名', '商品名(必須)', 'productname', 'name', '品名', '商品', 'title'].includes(headerStr)) {
+        nameIdx = index;
+      } else if (['メーカー', 'メーカー(ブランド)', 'maker', 'brand', 'メーカー名', 'ブランド', 'manufacturer'].includes(headerStr)) {
+        makerIdx = index;
+      } else if (['サイズ', 'サイズ/容量/仕様', 'サイズ(容量等)', 'size', '容量', '規格', 'capacity'].includes(headerStr)) {
+        sizeIdx = index;
+      } else if (['単位', 'デフォルト単位', 'unit'].includes(headerStr)) {
+        unitIdx = index;
+      } else if (['備考', '備考(保管場所や発注詳細など)', 'remarks', 'memo', 'メモ'].includes(headerStr)) {
+        remarksIdx = index;
+      }
+    });
+
+    // Fallbacks based on typical column order if headers are missing or custom
+    if (janIdx === -1) janIdx = 0;
+    if (nameIdx === -1) nameIdx = headerRow.length > 1 ? 1 : -1;
+    if (makerIdx === -1 && headerRow.length > 2) makerIdx = 2;
+    if (sizeIdx === -1 && headerRow.length > 3) sizeIdx = 3;
+    if (unitIdx === -1 && headerRow.length > 4) unitIdx = 4;
+    if (remarksIdx === -1 && headerRow.length > 5) remarksIdx = 5;
+
+    if (janIdx === -1 || nameIdx === -1) {
+      alert("JANコード及び商品名に該当する列が見つかりません。ヘッダー（1行目）に「JANコード」と「商品名」を記載してください。");
+      return;
+    }
+
+    const parsedItems: any[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const cols = parseCSVLine(line);
+      // Clean up JAN
+      const rawJan = cols[janIdx] ? cols[janIdx].trim() : '';
+      const cleanJan = rawJan.replace(/[^0-9]/g, '');
+      const productName = cols[nameIdx] ? cols[nameIdx].trim() : '';
+
+      if (!cleanJan || !productName) continue; // Skip incomplete or header lines
+
+      parsedItems.push({
+        janCode: cleanJan,
+        productName: productName,
+        maker: makerIdx !== -1 && cols[makerIdx] ? cols[makerIdx].trim() : '',
+        size: sizeIdx !== -1 && cols[sizeIdx] ? cols[sizeIdx].trim() : '',
+        unit: unitIdx !== -1 && cols[unitIdx] ? cols[unitIdx].trim() : '個',
+        remarks: remarksIdx !== -1 && cols[remarksIdx] ? cols[remarksIdx].trim() : ''
+      });
+    }
+
+    if (parsedItems.length === 0) {
+      alert("有効なデータ行（JANコードと商品名が入っている行）が見つかりませんでした。");
+      return;
+    }
+
+    setCsvPreviewItems(parsedItems);
+    setIsCsvModalOpen(true);
+  }
+
+  // Execute the import process to Firestore
+  async function runCsvImport() {
+    setIsImporting(true);
+    let added = 0;
+    let updated = 0;
+    const total = csvPreviewItems.length;
+    setImportProgress({ current: 0, total });
+
+    // Build map of existing items for super fast client-side checks
+    const existingMap = new Map<string, string>();
+    items.forEach(item => {
+      existingMap.set(item.janCode, item.id);
+    });
+
+    try {
+      for (let i = 0; i < total; i++) {
+        const itemData = csvPreviewItems[i];
+        const payload = {
+          janCode: itemData.janCode,
+          productName: itemData.productName,
+          maker: itemData.maker || null,
+          size: itemData.size || null,
+          unit: itemData.unit || null,
+          remarks: itemData.remarks || null,
+        };
+
+        const existingId = existingMap.get(itemData.janCode);
+        if (existingId) {
+          await updateDoc(doc(db, 'product_master', existingId), payload);
+          updated++;
+        } else {
+          await addDoc(collection(db, 'product_master'), {
+            ...payload,
+            createdAt: serverTimestamp()
+          });
+          added++;
+        }
+
+        setImportProgress({ current: i + 1, total });
+        
+        // Minor breathable yield for UI responsiveness (every 10 items)
+        if (i % 10 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 30));
+        }
+      }
+
+      alert(`CSVインポートが完了しました！\n新しく追加: ${added}件\n既存更新: ${updated}件`);
+      setIsCsvModalOpen(false);
+      setCsvPreviewItems([]);
+      setImportProgress(null);
+    } catch (err) {
+      console.error("CSV import execution error:", err);
+      alert("インポート処理中にエラーが発生しました。");
+    } finally {
+      setIsImporting(false);
+    }
+  }
 
   // Helper to parse standard item name, extractor for product name, size & maker
   function parseStandardItem(item: { name: string; maker?: string | null }) {
@@ -234,6 +467,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         name: item.productName,
         maker: item.maker || null,
         janCode: item.janCode,
+        sortOrder: Date.now(),
         createdAt: serverTimestamp()
       });
     } catch (err) {
@@ -273,6 +507,10 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
   // Filter items in UI
   const filteredItems = items.filter(item => {
+    if (filterOnlyStd) {
+      const isStd = standardItems.some(std => std.janCode === item.janCode);
+      if (!isStd) return false;
+    }
     const term = search.toLowerCase();
     return (
       item.productName.toLowerCase().includes(term) ||
@@ -447,23 +685,64 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
       {/* SEARCH / CONTROLS */}
       <div className="p-4 bg-gray-900/50 border-b border-gray-800 shrink-0">
-        <div className="relative max-w-xl mx-auto">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="品番（JAN）、商品名、メーカー、サイズから検索..."
-            className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 text-sm font-bold placeholder:text-gray-500 text-white outline-none transition-all"
-          />
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-          {search && (
+        <div className="max-w-xl mx-auto flex flex-col md:flex-row gap-3">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="品番（JAN）、商品名、メーカー、サイズから検索..."
+              className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 text-xs font-bold placeholder:text-gray-500 text-white outline-none transition-all"
+            />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-700 hover:bg-gray-650 rounded-full text-gray-400"
+              >
+                <X size={10} />
+              </button>
+            )}
+          </div>
+          
+          <div className="flex gap-2">
             <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-700 hover:bg-gray-600 rounded-full"
+              onClick={() => setFilterOnlyStd(!filterOnlyStd)}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 border font-extrabold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap ${
+                filterOnlyStd 
+                  ? 'bg-amber-600 hover:bg-amber-550 border-amber-500 text-white shadow-md shadow-amber-950/25' 
+                  : 'bg-gray-800 hover:bg-gray-750 border-gray-700 text-amber-500'
+              }`}
+              title="定番(STD)として起用されている商品のみを絞り込んでリストアップ"
             >
-              <X size={12} />
+              <Star size={13} className={filterOnlyStd ? "fill-white text-white" : "fill-amber-500 text-amber-500"} />
+              {filterOnlyStd ? 'すべて表示' : 'STDのみ表示'}
             </button>
-          )}
+
+            <button
+              onClick={handleCsvExport}
+              className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              title="マスタ全件をCSVダウンロード"
+            >
+              <Download size={13} className="text-blue-400" />
+              CSV出力
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              title="CSVファイルをアップロードして一括登録・更新"
+            >
+              <Upload size={13} className="text-teal-400" />
+              CSV取込
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".csv"
+              className="hidden"
+            />
+          </div>
         </div>
       </div>
 
@@ -953,6 +1232,126 @@ export default function MasterMode({ onBack }: MasterModeProps) {
               >
                 閉じる
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CSV IMPORT PREVIEW MODAL */}
+      <AnimatePresence>
+        {isCsvModalOpen && (
+          <div className="fixed inset-0 z-[140] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { if (!isImporting) { setIsCsvModalOpen(false); setCsvPreviewItems([]); } }}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 210 }}
+              className="relative w-full max-w-xl bg-gray-900 border border-gray-800 rounded-[32px] p-6 shadow-2xl z-10 text-left overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-800 shrink-0">
+                <div>
+                  <h3 className="text-sm font-black text-white flex items-center gap-1.5">
+                    <Upload size={16} className="text-teal-400 animate-pulse" />
+                    CSV商品マスタ取込インポート
+                  </h3>
+                  <p className="text-[10px] text-gray-400 font-bold mt-1">
+                    インポート対象: {csvPreviewItems.length}件のレコードが検出されました
+                  </p>
+                </div>
+                {!isImporting && (
+                  <button
+                    onClick={() => { setIsCsvModalOpen(false); setCsvPreviewItems([]); }}
+                    className="p-1.5 bg-gray-800 hover:bg-gray-750 text-gray-400 hover:text-white rounded-full transition-colors active:scale-95"
+                    title="キャンセル"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {importProgress ? (
+                /* progress panel */
+                <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 flex-1">
+                  <Loader2 size={36} className="animate-spin text-teal-400" />
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-black text-white font-sans">Firestoreに書き込み・更新中...</h4>
+                    <p className="text-[11px] font-mono text-gray-400 font-bold">
+                      {importProgress.current} / {importProgress.total} 件処理中
+                    </p>
+                  </div>
+                  <div className="w-full max-w-xs bg-gray-950 h-2 rounded-full overflow-hidden border border-gray-800">
+                    <div 
+                      className="bg-gradient-to-r from-teal-500 to-emerald-500 h-full transition-all duration-150"
+                      style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-500 font-bold max-w-xs">
+                    ※ 既存の同一番号(JAN)は自動的に更新され、新しい番号は新規登録されます。ウィンドウを閉じずにお待ちください。
+                  </p>
+                </div>
+              ) : (
+                /* preview list & actions */
+                <>
+                  <div className="text-[10px] text-gray-300 bg-teal-950/20 border border-teal-900/40 p-3 rounded-2xl mb-4 leading-relaxed shrink-0">
+                    💡 <strong>処理確認:</strong> データベース上に同一のJANコードが既に登録されている場合は<strong>「最新情報に更新（上書き）」</strong>され、存在しないJANコードは<strong>「新規に登録」</strong>されます。
+                  </div>
+
+                  {/* table preview */}
+                  <div className="flex-1 overflow-y-auto space-y-2 mb-5 max-h-[40vh] border border-gray-800 rounded-2xl p-1 bg-gray-950">
+                    <table className="w-full text-[10px] text-left border-collapse">
+                      <thead className="bg-gray-900 sticky top-0 text-gray-400 font-bold border-b border-gray-850 border-solid">
+                        <tr>
+                          <th className="p-2.5 font-bold">JANコード</th>
+                          <th className="p-2.5 font-bold">商品名</th>
+                          <th className="p-2.5 font-bold">メーカー</th>
+                          <th className="p-2.5 font-bold">サイズ</th>
+                          <th className="p-2.5 font-bold">単位</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-850/50 font-medium font-sans">
+                        {csvPreviewItems.slice(0, 50).map((pItem, idx) => (
+                          <tr key={idx} className="hover:bg-gray-900/50">
+                            <td className="p-2.5 font-mono text-gray-300">{pItem.janCode}</td>
+                            <td className="p-2.5 text-white font-black truncate max-w-[120px]" title={pItem.productName}>{pItem.productName}</td>
+                            <td className="p-2.5 text-gray-400 truncate max-w-[80px]" title={pItem.maker}>{pItem.maker || '-'}</td>
+                            <td className="p-2.5 text-gray-400">{pItem.size || '-'}</td>
+                            <td className="p-2.5 text-gray-400">{pItem.unit || '個'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {csvPreviewItems.length > 50 && (
+                      <div className="p-3 text-center text-gray-500 font-bold border-t border-gray-850 bg-gray-900/10 text-[10px]">
+                        ほか {csvPreviewItems.length - 50} 件のデータがあります（全件インポートされます）
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 shrink-0 pt-3 border-t border-gray-800">
+                    <button
+                      onClick={() => { setIsCsvModalOpen(false); setCsvPreviewItems([]); }}
+                      className="flex-1 py-3.5 bg-gray-800 hover:bg-gray-750 text-gray-300 font-bold rounded-2xl active:scale-95 transition-all text-xs text-center"
+                    >
+                      キャンセル
+                    </button>
+                    <button
+                      onClick={runCsvImport}
+                      className="flex-[2] py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-black rounded-2xl active:scale-[0.98] transition-all text-xs text-center flex items-center justify-center gap-2 shadow-lg shadow-teal-950/20"
+                    >
+                      <Check size={14} />
+                      インポートを実行（反映）
+                    </button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </div>
         )}
