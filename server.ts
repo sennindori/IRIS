@@ -154,15 +154,34 @@ async function startServer() {
 
     // Helper to try Yahoo! Shopping API
     const tryYahooShopping = async (): Promise<any | null> => {
-      if (!appId || appId === "YOUR_YAHOO_APP_ID" || appId.trim() === "") {
-        console.warn("YAHOO_APP_ID is not configured. Skipping Yahoo Shopping API.");
+      const trimmedAppId = appId?.trim();
+      if (!trimmedAppId || trimmedAppId === "YOUR_YAHOO_APP_ID" || trimmedAppId === "") {
+        console.warn("YAHOO_APP_ID is not configured or holds default placeholder. Skipping Yahoo Shopping API.");
         return null;
       }
       try {
-        const url = `https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?appid=${appId}&jan_code=${janCode}`;
-        const yahooRes = await fetch(url);
-        if (!yahooRes.ok) return null;
+        const maskedAppId = trimmedAppId.length > 8 
+          ? `${trimmedAppId.substring(0, 4)}...${trimmedAppId.substring(trimmedAppId.length - 4)}` 
+          : "Configured";
+        console.log(`[Yahoo API Request] Searching item for JAN Code: ${janCode} using YAHOO_APP_ID: [${maskedAppId}]`);
+        
+        const url = `https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?jan_code=${janCode}`;
+        const yahooRes = await fetch(url, {
+          method: "GET",
+          headers: {
+            "User-Agent": `Yahoo AppID: ${trimmedAppId}`,
+            "Accept": "application/json"
+          }
+        });
+
+        if (!yahooRes.ok) {
+          const errText = await yahooRes.text().catch(() => "");
+          console.error(`[Yahoo API Error] HTTP ${yahooRes.status}: ${yahooRes.statusText}. Response: ${errText}`);
+          return null;
+        }
+
         const data = (await yahooRes.json()) as any;
+        console.log(`[Yahoo API Response] Successfully fetched data. Hits found: ${data.hits?.length || 0}`);
 
         if (data.hits && data.hits.length > 0) {
           const item = data.hits[0];
