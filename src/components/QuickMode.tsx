@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -7,11 +7,10 @@ import {
   Minus, 
   Check, 
   Loader2, 
-  ArrowUp, 
-  ArrowDown, 
   TrendingUp, 
   Star, 
-  Building 
+  Building,
+  GripVertical
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { 
@@ -39,6 +38,9 @@ export default function QuickMode({ onBack }: QuickModeProps) {
   // App states
   const [isReorderingMode, setIsReorderingMode] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const touchStartY = useRef<number>(0);
+  const touchStartIndex = useRef<number | null>(null);
   
   // Order parameters
   const [quantity, setQuantity] = useState(1);
@@ -86,18 +88,22 @@ export default function QuickMode({ onBack }: QuickModeProps) {
   }, []);
 
   // Merge standard_items with their latest configurations from product_master
-  const mergedItems = standardItems.map(std => {
-    const master = masterItems.find(m => m.janCode === std.janCode);
-    return {
-      ...std,
-      // Prefer fields from the master database since they are single source of truth
-      displayName: master?.productName || std.name,
-      maker: master?.maker || std.maker || '',
-      size: master?.size || '',
-      unit: master?.unit || '個',
-      remarks: master?.remarks || ''
-    };
-  });
+  // AND FILTER OUT items that do not exist in the product_master (completely synchronize with master database)
+  const mergedItems = standardItems
+    .map(std => {
+      const master = masterItems.find(m => m.janCode === std.janCode);
+      if (!master) return null;
+      return {
+        ...std,
+        // Prefer fields from the master database since they are single source of truth
+        displayName: master.productName,
+        maker: master.maker || '',
+        size: master.size || '',
+        unit: master.unit || '個',
+        remarks: master.remarks || ''
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   // Sort items based on custom sortOrder, with fallback to createdAt timestamp
   const sortedItems = [...mergedItems].sort((a, b) => {
@@ -120,34 +126,75 @@ export default function QuickMode({ onBack }: QuickModeProps) {
     );
   });
 
-  // Custom Up/Down Sorting Handler: Performs optimistic swap & uploads to Firestore
-  const handleMoveItem = async (index: number, direction: 'up' | 'down') => {
-    const targetIdx = direction === 'up' ? index - 1 : index + 1;
-    if (targetIdx < 0 || targetIdx >= sortedItems.length) return;
+  // Drag and Drop & Touch Sorting Handlers
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // Required to allow drop functionality
+  };
+
+  const handleDragEnter = (index: number) => {
+    if (draggedIndex === null || draggedIndex === index) return;
 
     const workingList = [...sortedItems];
-    
-    // Swap items in the local copy
-    const temp = workingList[index];
-    workingList[index] = workingList[targetIdx];
-    workingList[targetIdx] = temp;
+    const draggedItem = workingList[draggedIndex];
 
-    // Optimistically apply sorted list to smooth out animations
-    const newItems = workingList.map((item, idx) => ({ ...item, sortOrder: idx }));
-    setStandardItems(newItems);
+    // Rearrange item position inside array
+    workingList.splice(draggedIndex, 1);
+    workingList.splice(index, 0, draggedItem);
 
+    // Optimistically update standardItems order state for smooth layout animation
+    const reindexedItems = workingList.map((item, idx) => ({ ...item, sortOrder: idx }));
+    setStandardItems(reindexedItems);
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = async () => {
+    setDraggedIndex(null);
     try {
-      // Re-index both updated items on Firebase
-      await updateDoc(doc(db, 'standard_items', workingList[index].id), {
-        sortOrder: index
-      });
-      await updateDoc(doc(db, 'standard_items', workingList[targetIdx].id), {
-        sortOrder: targetIdx
-      });
+      // Re-index all active items in standard_items on Firestore to store stable, non-temporary indexes
+      const promises = sortedItems.map((item, idx) => 
+        updateDoc(doc(db, 'standard_items', item.id), {
+          sortOrder: idx
+        })
+      );
+      await Promise.all(promises);
     } catch (err) {
       console.error("Firestore reorder failed:", err);
-      alert("並べ替え順の保存に失敗しました。");
     }
+  };
+
+  const handleTouchStart = (index: number, e: React.TouchEvent) => {
+    if (!isReorderingMode) return;
+    touchStartY.current = e.touches[0].clientY;
+    touchStartIndex.current = index;
+    setDraggedIndex(index);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isReorderingMode || touchStartIndex.current === null) return;
+    const currentY = e.touches[0].clientY;
+
+    // Retrieve active element under finger positioning dynamically
+    const element = document.elementFromPoint(e.touches[0].clientX, currentY);
+    if (!element) return;
+
+    // Search for a list item container with data-idx attribute
+    const itemContainer = element.closest('[data-idx]');
+    if (itemContainer) {
+      const targetIndex = parseInt(itemContainer.getAttribute('data-idx') || '', 10);
+      if (!isNaN(targetIndex) && targetIndex !== draggedIndex && draggedIndex !== null) {
+        handleDragEnter(targetIndex);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isReorderingMode) return;
+    touchStartIndex.current = null;
+    handleDragEnd();
   };
 
   // Open item sheet/modal for replenishment
@@ -229,7 +276,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
             <Star size={11} className="text-amber-500 fill-amber-500 shrink-0" />
             <span>
               {isReorderingMode 
-                ? "【並べ替え中】上下の矢印ボタンでSTDリストを任意の順序に変えられます。" 
+                ? "【並べ替え中】商品カードをドラッグして、または指で上下にスライドして任意の並び順に変更できます。" 
                 : "よく使われる定番登録(STD)商品の一覧です。タップして補充依頼を送信できます。"}
             </span>
           </div>
@@ -273,11 +320,25 @@ export default function QuickMode({ onBack }: QuickModeProps) {
             filteredItems.map((item, idx) => {
               const isFirst = idx === 0;
               const isLast = idx === filteredItems.length - 1;
+              const isCurrentlyDragged = draggedIndex === idx;
               
               return (
                 <div
                   key={item.id}
-                  className="bg-white border border-gray-200/60 rounded-2xl p-3 flex items-center justify-between hover:shadow-md hover:border-gray-300 transition-all relative overflow-hidden"
+                  data-idx={idx}
+                  draggable={isReorderingMode}
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragOver={handleDragOver}
+                  onDragEnter={() => handleDragEnter(idx)}
+                  onDragEnd={handleDragEnd}
+                  onTouchStart={(e) => handleTouchStart(idx, e)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  className={`bg-white border rounded-2xl p-3 flex items-center justify-between hover:shadow-md transition-all relative overflow-hidden select-none ${
+                    isReorderingMode 
+                      ? 'cursor-grab active:cursor-grabbing border-amber-200 bg-amber-50/5/20 shadow-sm' 
+                      : 'border-gray-200/60'
+                  } ${isCurrentlyDragged ? 'opacity-40 border-dashed border-amber-500 bg-amber-50/30 scale-[0.98]' : ''}`}
                 >
                   <div className="flex-1 min-w-0 pr-4 text-left">
                     <div className="flex flex-wrap items-center gap-1.5 mb-1 text-[9px] font-bold">
@@ -304,32 +365,9 @@ export default function QuickMode({ onBack }: QuickModeProps) {
 
                   {/* ACTION CONTROLS DEPENDING ON CURRENT MODE */}
                   {isReorderingMode ? (
-                    /* REORDER MODE: Move Up & Down Arrow Buttons */
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => handleMoveItem(idx, 'up')}
-                        disabled={isFirst}
-                        className={`p-2.5 rounded-xl border border-solid transition-colors ${
-                          isFirst 
-                            ? 'bg-gray-50 text-gray-300 border-gray-105 cursor-not-allowed' 
-                            : 'bg-white text-gray-650 border-gray-200 hover:bg-gray-50 active:scale-95'
-                        }`}
-                        title="上へ移動"
-                      >
-                        <ArrowUp size={13} strokeWidth={2.5} />
-                      </button>
-                      <button
-                        onClick={() => handleMoveItem(idx, 'down')}
-                        disabled={isLast}
-                        className={`p-2.5 rounded-xl border border-solid transition-colors ${
-                          isLast 
-                            ? 'bg-gray-50 text-gray-300 border-gray-105 cursor-not-allowed' 
-                            : 'bg-white text-gray-650 border-gray-200 hover:bg-gray-50 active:scale-95'
-                        }`}
-                        title="下へ移動"
-                      >
-                        <ArrowDown size={13} strokeWidth={2.5} />
-                      </button>
+                    /* REORDER MODE: Touch & Move Grip Handle */
+                    <div className="flex items-center gap-1 shrink-0 p-2 rounded-xl bg-amber-50 border border-amber-200/50 cursor-grab active:cursor-grabbing">
+                      <GripVertical size={16} strokeWidth={2.5} className="text-amber-600 animate-pulse" />
                     </div>
                   ) : (
                     /* NORMAL MODE: Simple Click to Replenish Card */
