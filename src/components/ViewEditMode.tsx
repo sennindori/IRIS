@@ -527,7 +527,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
 
                         if (genreItems.length === 0) return null;
 
-                        const isCollapsed = collapsedGenresView[genre] ?? false;
+                        const isCollapsed = collapsedGenresView[genre] ?? true;
 
                         return (
                           <div 
@@ -686,7 +686,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
 
                       if (genreItems.length === 0) return null;
 
-                      const isCollapsed = collapsedGenresEdit[genre] ?? false;
+                      const isCollapsed = collapsedGenresEdit[genre] ?? true;
 
                       return (
                         <div 
