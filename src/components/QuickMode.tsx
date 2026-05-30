@@ -508,17 +508,35 @@ export default function QuickMode({ onBack }: QuickModeProps) {
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">数量を選択</span>
                   <div className="flex items-center justify-center gap-6 py-1 bg-gray-50 border border-gray-100 rounded-2xl max-w-xs mx-auto">
                     <button 
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="w-12 h-12 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-650 hover:bg-gray-50 active:scale-90 transition-all font-bold shadow-sm"
+                      onClick={() => setQuantity(Math.max(0, quantity - 1))}
+                      className="w-12 h-12 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-650 hover:bg-gray-50 active:scale-90 transition-all font-bold shadow-sm cursor-pointer"
                     >
                       <Minus size={20} strokeWidth={2.5} />
                     </button>
-                    <div className="text-4xl font-extrabold text-gray-900 min-w-[3rem] text-center font-mono select-none">
-                      {quantity}
+                    
+                    <div className="relative min-w-[4rem] h-14 flex flex-col items-center justify-center bg-gray-250/20 hover:bg-gray-200/40 rounded-xl transition-all cursor-pointer select-none">
+                      <span className="text-4xl font-extrabold text-gray-950 font-mono leading-none">
+                        {quantity}
+                      </span>
+                      <span className="text-[8px] font-black tracking-wider text-amber-700 leading-none mt-1 uppercase font-sans shrink-0">
+                        変更 ▼
+                      </span>
+                      <select
+                        value={quantity}
+                        onChange={(e) => setQuantity(Number(e.target.value))}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none text-base"
+                      >
+                        {Array.from({ length: 100 }, (_, i) => (
+                          <option key={i} value={i}>
+                            {i}
+                          </option>
+                        ))}
+                      </select>
                     </div>
+
                     <button 
                       onClick={() => setQuantity(quantity + 1)}
-                      className="w-12 h-12 rounded-full bg-gray-900 hover:bg-gray-800 flex items-center justify-center text-white active:scale-90 transition-all font-bold shadow-md shadow-gray-300"
+                      className="w-12 h-12 rounded-full bg-gray-900 hover:bg-gray-800 flex items-center justify-center text-white active:scale-90 transition-all font-bold shadow-md shadow-gray-300 cursor-pointer"
                     >
                       <Plus size={20} strokeWidth={2.5} />
                     </button>

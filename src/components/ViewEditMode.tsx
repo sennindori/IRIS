@@ -26,10 +26,22 @@ import {
   Save, 
   Search, 
   Volume2, 
-  VolumeX 
+  VolumeX,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ReplenishmentItem } from '../types';
+
+const MASTER_GENRES = [
+  '水・炭酸水',
+  '茶系飲料',
+  'ジュース',
+  '紅茶・コーヒー',
+  '健康飲料',
+  'エナジー飲料',
+  'その他'
+];
 
 interface ViewEditModeProps {
   initialTab: 'view' | 'edit';
@@ -41,7 +53,12 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
   
   // Data states
   const [items, setItems] = useState<ReplenishmentItem[]>([]);
+  const [masterItems, setMasterItems] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Collapse states for genres by tab
+  const [collapsedGenresView, setCollapsedGenresView] = useState<Record<string, boolean>>({});
+  const [collapsedGenresEdit, setCollapsedGenresEdit] = useState<Record<string, boolean>>({});
   
   // Audio state & control for live updates
   const [audioMuted, setAudioMuted] = useState(false);
@@ -93,8 +110,21 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
       console.error("Replenishment fetch failed", error);
     });
 
+    // 2. Subscription to all product master items to resolve genres by janCode
+    const qMaster = query(collection(db, 'product_master'));
+    const unsubscribeMaster = onSnapshot(qMaster, (snapshot) => {
+      const pItems = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setMasterItems(pItems);
+    }, (error) => {
+      console.error("Failed to load product master in ViewEditMode:", error);
+    });
+
     return () => {
       unsubscribe1();
+      unsubscribeMaster();
     };
   }, [audioMuted]);
 
@@ -275,6 +305,30 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
     }
   }
 
+  // Helper to determine the genre of a replenishment item
+  const getGenreForItem = (item: ReplenishmentItem) => {
+    const matchedMaster = masterItems.find(m => m.janCode === item.janCode);
+    return matchedMaster?.genre || 'その他';
+  };
+
+  const toggleGenreCollapseView = (genre: string) => {
+    setCollapsedGenresView((prev) => ({
+      ...prev,
+      [genre]: !prev[genre]
+    }));
+  };
+
+  const toggleGenreCollapseEdit = (genre: string) => {
+    setCollapsedGenresEdit((prev) => ({
+      ...prev,
+      [genre]: !prev[genre]
+    }));
+  };
+
+  const sortAlphabetically = (a: ReplenishmentItem, b: ReplenishmentItem) => {
+    return a.productName.localeCompare(b.productName, 'ja-JP');
+  };
+
   // Filter datasets based on status and search queries
   const activePendingItems = items.filter(item => item.status === 'pending');
   
@@ -446,7 +500,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
           <>
             {/* ----------------- TAB 1: VIEW (REAL-TIME STATUS WATCHER + STANDARD MASTER CATALOG) ----------------- */}
             {activeTab === 'view' && (
-              <div className="space-y-8 max-w-6xl mx-auto">
+              <div className="space-y-6 max-w-6xl mx-auto">
                 {/* 1. Situation Confirmation: Pending Replenishments */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
@@ -465,78 +519,118 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <AnimatePresence initial={false}>
-                        {activePendingItems.map((item) => (
-                          <motion.div
-                            key={item.id}
-                            layout="position"
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="group relative bg-gray-900 rounded-2xl aspect-[16/9] xs:aspect-auto xs:h-36 sm:h-38 lg:h-40 overflow-hidden border border-gray-800/60 shadow-2xl flex flex-col"
+                    <div className="space-y-4">
+                      {MASTER_GENRES.map((genre) => {
+                        const genreItems = activePendingItems
+                          .filter((item) => getGenreForItem(item) === genre)
+                          .sort(sortAlphabetically);
+
+                        if (genreItems.length === 0) return null;
+
+                        const isCollapsed = collapsedGenresView[genre] ?? false;
+
+                        return (
+                          <div 
+                            key={genre} 
+                            className="bg-gray-900/40 rounded-3xl border border-gray-800/60 overflow-hidden text-left"
                           >
-                            {/* Background product image container */}
-                            {item.imageUrl ? (
-                              <img 
-                                src={item.imageUrl} 
-                                alt={item.productName} 
-                                className="absolute inset-0 w-full h-full object-contain p-3 bg-white transition-all duration-700 group-hover:scale-105 animate-fade-in" 
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-gray-700">
-                                <Package size={36} strokeWidth={1} className="opacity-30" />
+                            {/* collapsible header */}
+                            <button
+                              onClick={() => toggleGenreCollapseView(genre)}
+                              className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-900/60 transition-colors font-extrabold text-xs tracking-wider uppercase text-gray-300 cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                                {genre}
+                                <span className="bg-blue-500/10 text-blue-400 text-[10px] px-2 py-0.5 rounded-full border border-blue-500/10 font-mono ml-1">
+                                  {genreItems.length}
+                                </span>
+                              </div>
+                              <div className="text-gray-500">
+                                {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                              </div>
+                            </button>
+
+                            {!isCollapsed && (
+                              <div className="p-4 pt-1 border-t border-gray-800/40">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+                                  <AnimatePresence initial={false}>
+                                    {genreItems.map((item) => (
+                                      <motion.div
+                                        key={item.id}
+                                        layout="position"
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.95 }}
+                                        className="group relative bg-gray-900 rounded-2xl aspect-[16/9] xs:aspect-auto xs:h-36 sm:h-38 lg:h-40 overflow-hidden border border-gray-800/60 shadow-2xl flex flex-col"
+                                      >
+                                        {/* Background product image container */}
+                                        {item.imageUrl ? (
+                                          <img 
+                                            src={item.imageUrl} 
+                                            alt={item.productName} 
+                                            className="absolute inset-0 w-full h-full object-contain p-3 bg-white transition-all duration-700 group-hover:scale-105 animate-fade-in" 
+                                            referrerPolicy="no-referrer"
+                                          />
+                                        ) : (
+                                          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-gray-700">
+                                            <Package size={36} strokeWidth={1} className="opacity-30" />
+                                          </div>
+                                        )}
+
+                                        {/* Linear Gradient dimming on top of the image to keep text legible */}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/60 to-transparent"></div>
+
+                                        {/* Content overlay tags and values */}
+                                        <div className="absolute inset-x-0 bottom-0 p-3 sm:p-3.5 z-10 text-left">
+                                          <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono mb-1">
+                                            <Hash size={11} className="text-blue-400" /> {item.janCode}
+                                            <span className="opacity-20 flex">|</span>
+                                            <Clock size={11} className="text-gray-500" /> {formatTime(item.createdAt)}
+                                          </div>
+                                          
+                                          <h3 className="text-xs sm:text-sm font-black text-white leading-tight mb-1.5 drop-shadow-md truncate">
+                                            {item.productName}
+                                          </h3>
+                                          
+                                          <div className="flex items-end justify-between gap-2.5">
+                                            <div className="flex-1 min-w-0">
+                                              {item.maker && (
+                                                <span className="inline-block mb-1 mr-1 px-1.5 py-0.5 bg-white/10 backdrop-blur-md text-white text-[9px] font-black rounded-md border border-white/25 uppercase tracking-wider truncate max-w-full">
+                                                  {item.maker}
+                                                </span>
+                                              )}
+                                              <span className={`inline-block mb-1 px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full ${
+                                                item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+                                                item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                                                item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
+                                                item.subcategory === 'その他' ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/60' :
+                                                'bg-blue-500/20 text-blue-350 border-blue-500/30'
+                                              }`}>
+                                                {item.subcategory || '通常'}
+                                              </span>
+                                              {/* リアルタイム補充進捗 */}
+                                              <div className="text-[10px] font-bold text-emerald-400 drop-shadow flex items-center gap-1.5 mt-0.5">
+                                                <span>対応: {item.fulfilledQuantity || 0}</span>
+                                                <span className="opacity-35">|</span>
+                                                <span className="text-orange-300">残り: {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}</span>
+                                              </div>
+                                            </div>
+                                            <div className="px-2.5 py-1 bg-blue-600 text-white rounded-lg shadow-[0_0_12px_rgba(37,99,235,0.3)] font-black text-base shrink-0 flex items-baseline">
+                                              {item.quantity}
+                                              <span className="text-[10px] ml-0.5 opacity-80">{item.unit || '個'}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </motion.div>
+                                    ))}
+                                  </AnimatePresence>
+                                </div>
                               </div>
                             )}
-
-                            {/* Linear Gradient dimming on top of the image to keep text legible */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/60 to-transparent"></div>
-
-                            {/* Content overlay tags and values */}
-                            <div className="absolute inset-x-0 bottom-0 p-3 sm:p-3.5 z-10 text-left">
-                              <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono mb-1">
-                                <Hash size={11} className="text-blue-400" /> {item.janCode}
-                                <span className="opacity-20">|</span>
-                                <Clock size={11} className="text-gray-500" /> {formatTime(item.createdAt)}
-                              </div>
-                              
-                              <h3 className="text-xs sm:text-sm font-black text-white leading-tight mb-1.5 drop-shadow-md truncate">
-                                {item.productName}
-                              </h3>
-                              
-                              <div className="flex items-end justify-between gap-2.5">
-                                <div className="flex-1 min-w-0">
-                                  {item.maker && (
-                                    <span className="inline-block mb-1 mr-1 px-1.5 py-0.5 bg-white/10 backdrop-blur-md text-white text-[9px] font-black rounded-md border border-white/25 uppercase tracking-wider truncate max-w-full">
-                                      {item.maker}
-                                    </span>
-                                  )}
-                                  <span className={`inline-block mb-1 px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full ${
-                                    item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
-                                    item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                                    item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
-                                    item.subcategory === 'その他' ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/60' :
-                                    'bg-blue-500/20 text-blue-350 border-blue-500/30'
-                                  }`}>
-                                    {item.subcategory || '通常'}
-                                  </span>
-                                  {/* リアルタイム補充進捗 */}
-                                  <div className="text-[10px] font-bold text-emerald-400 drop-shadow flex items-center gap-1.5 mt-0.5">
-                                    <span>対応: {item.fulfilledQuantity || 0}</span>
-                                    <span className="opacity-35">|</span>
-                                    <span className="text-orange-300">残り: {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}</span>
-                                  </div>
-                                </div>
-                                <div className="px-2.5 py-1 bg-blue-600 text-white rounded-lg shadow-[0_0_12px_rgba(37,99,235,0.3)] font-black text-base shrink-0 flex items-baseline">
-                                  {item.quantity}
-                                  <span className="text-[10px] ml-0.5 opacity-80">{item.unit || '個'}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -584,273 +678,311 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                     <p className="text-xs font-bold text-gray-400">該当する商品は見つかりませんでした</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <AnimatePresence initial={false}>
-                      {filteredReplenishmentList.map((item) => (
-                        <motion.div
-                          key={item.id}
-                          layout="position"
-                          className={`relative rounded-2xl overflow-hidden shadow-md border transition-all ${
-                            item.status === 'completed' 
-                              ? 'bg-gray-950/60 border-gray-900/50 opacity-40 grayscale' 
-                              : 'bg-gray-900 border-gray-800/80 hover:border-gray-700/80'
-                          }`}
+                  <div className="space-y-4">
+                    {MASTER_GENRES.map((genre) => {
+                      const genreItems = filteredReplenishmentList
+                        .filter((item) => getGenreForItem(item) === genre)
+                        .sort(sortAlphabetically);
+
+                      if (genreItems.length === 0) return null;
+
+                      const isCollapsed = collapsedGenresEdit[genre] ?? false;
+
+                      return (
+                        <div 
+                          key={genre} 
+                          className="bg-gray-950/40 rounded-3xl border border-gray-900/40 overflow-hidden text-left"
                         >
-                          {/* Mini blur-image placeholder back of card */}
-                          {item.imageUrl && (
-                            <div className="absolute inset-0 z-0">
-                              <img src={item.imageUrl} alt="" className="w-full h-full object-contain bg-white p-4 opacity-10" />
-                              <div className="absolute inset-0 bg-gray-950/70"></div>
+                          {/* Collapsible header */}
+                          <button
+                            onClick={() => toggleGenreCollapseEdit(genre)}
+                            className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-900/60 transition-colors font-extrabold text-xs tracking-wider uppercase text-gray-400 cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                              {genre}
+                              <span className="bg-blue-500/10 text-blue-400 text-[10px] px-2 py-0.5 rounded-full border border-blue-500/10 font-mono ml-1">
+                                {genreItems.length}
+                              </span>
+                            </div>
+                            <div className="text-gray-500">
+                              {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                            </div>
+                          </button>
+
+                          {!isCollapsed && (
+                            <div className="p-4 pt-1 border-t border-gray-900/30 space-y-3">
+                              <AnimatePresence initial={false}>
+                                {genreItems.map((item) => (
+                                  <motion.div
+                                    key={item.id}
+                                    layout="position"
+                                    className={`relative rounded-2xl overflow-hidden shadow-md border transition-all ${
+                                      item.status === 'completed' 
+                                        ? 'bg-gray-955/60 border-gray-900/50 opacity-40 grayscale' 
+                                        : 'bg-gray-900 border-gray-800/80 hover:border-gray-700/80'
+                                    }`}
+                                  >
+                                    {/* Mini blur-image placeholder back of card */}
+                                    {item.imageUrl && (
+                                      <div className="absolute inset-0 z-0">
+                                        <img src={item.imageUrl} alt="" className="w-full h-full object-contain bg-white p-4 opacity-10" />
+                                        <div className="absolute inset-0 bg-gray-950/70"></div>
+                                      </div>
+                                    )}
+
+                                    <div className="relative z-10 p-3 sm:p-3.5 text-left font-sans">
+                                      {editingId === item.id ? (
+                                        <div className="space-y-3">
+                                          <div className="text-[10px] text-gray-500 font-black pl-1">商品情報を編集しています</div>
+                                          <input
+                                            type="text"
+                                            value={editValue.maker}
+                                            onChange={(e) => setEditValue({ ...editValue, maker: e.target.value })}
+                                            className="w-full px-4 py-2 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-xs"
+                                            placeholder="メーカー名 (任意)"
+                                          />
+                                          <input
+                                            type="text"
+                                            value={editValue.productName}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              const spaceMatch = val.match(/[\s　]/);
+                                              if (spaceMatch && spaceMatch.index !== undefined && !editValue.maker) {
+                                                const newMaker = val.substring(0, spaceMatch.index).trim();
+                                                const newName = val.substring(spaceMatch.index + 1).trim();
+                                                setEditValue({ ...editValue, maker: newMaker, productName: newName });
+                                              } else {
+                                                setEditValue({ ...editValue, productName: val });
+                                              }
+                                            }}
+                                            className="w-full px-4 py-3 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-sm"
+                                            placeholder="商品名"
+                                          />
+                                          <div className="grid grid-cols-3 gap-2">
+                                            <div>
+                                              <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">依頼数量</label>
+                                              <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                value={editValue.quantity}
+                                                onChange={(e) => {
+                                                  const numericVal = e.target.value.replace(/[^0-9]/g, '');
+                                                  setEditValue({ ...editValue, quantity: numericVal });
+                                                }}
+                                                className="w-full px-3 py-2 bg-gray-950 border border-gray-850 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-xs"
+                                                placeholder="依頼数"
+                                              />
+                                            </div>
+                                            <div>
+                                              <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">現対応数</label>
+                                              <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                value={editValue.fulfilledQuantity}
+                                                onChange={(e) => {
+                                                  const val = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                                                  setEditValue({ ...editValue, fulfilledQuantity: val });
+                                                }}
+                                                className="w-full px-3 py-2 bg-gray-950 border border-gray-850 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-xs"
+                                                placeholder="対応数"
+                                              />
+                                            </div>
+                                            <div>
+                                              <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">単位</label>
+                                              <select
+                                                value={editValue.unit}
+                                                onChange={(e) => setEditValue({ ...editValue, unit: e.target.value })}
+                                                className="w-full px-3 py-2 bg-gray-950 border border-gray-850 text-white rounded-xl focus:border-blue-500 outline-none font-bold appearance-none text-[16px] md:text-xs cursor-pointer"
+                                              >
+                                                <option value="個">個</option>
+                                                <option value="ケース">ケース</option>
+                                                <option value="点">点</option>
+                                                <option value="箱">箱</option>
+                                              </select>
+                                            </div>
+                                          </div>
+
+                                          <div>
+                                            <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">売場サブカテゴリ</label>
+                                            <div className="flex bg-gray-950 border border-gray-850 p-1 rounded-xl gap-1 overflow-x-auto scrollbar-none">
+                                              {['通常', '催事', 'エンド', '客注', 'その他'].map((s) => (
+                                                <button
+                                                  key={s}
+                                                  type="button"
+                                                  onClick={() => setEditValue({ ...editValue, subcategory: s })}
+                                                  className={`flex-1 min-w-[3.2rem] py-1.5 text-[11px] font-black rounded-lg transition-all ${
+                                                    editValue.subcategory === s 
+                                                      ? 'bg-blue-600 text-white' 
+                                                      : 'text-gray-500 hover:text-gray-300'
+                                                  }`}
+                                                >
+                                                  {s}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </div>
+
+                                          <div className="flex gap-2 pt-1.5">
+                                            <button onClick={saveEdit} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl flex items-center justify-center gap-1.5 font-black shadow-lg shadow-blue-500/10 text-xs">
+                                              <Save size={14} /> 反映する
+                                            </button>
+                                            <button onClick={() => setEditingId(null)} className="flex-1 py-2.5 bg-gray-800 text-gray-400 rounded-xl font-bold text-xs">
+                                              キャンセル
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center justify-between gap-4">
+                                          <div className="flex-1 min-w-0 font-sans">
+                                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                                item.status === 'completed' ? 'bg-gray-800 text-gray-500 border border-gray-700/30' : 'bg-blue-600 text-white'
+                                              }`}>
+                                                {item.status === 'completed' ? '完了' : '未対応'}
+                                              </span>
+                                              <span className="text-[10px] text-gray-500 font-mono tracking-tight font-bold">{item.janCode}</span>
+                                              <span className="text-[10px] text-gray-500 ml-auto font-mono">{formatDate(item.createdAt)}</span>
+                                            </div>
+                                            
+                                            <h3 className={`text-xs sm:text-sm font-black leading-tight mb-2 truncate ${item.status === 'completed' ? 'line-through text-gray-600' : 'text-gray-100'}`}>
+                                              {item.productName}
+                                            </h3>
+                                            
+                                            <div className="flex flex-wrap items-center justify-between gap-3 mt-1.5 pt-2 border-t border-gray-850/30">
+                                              <div className="flex-1 min-w-0">
+                                                {item.maker && (
+                                                  <span className="inline-block px-1.5 py-0.5 bg-gray-800/80 text-gray-400 text-[9px] font-medium rounded-md truncate max-w-full mb-1 mr-1">
+                                                    {item.maker}
+                                                  </span>
+                                                )}
+                                                <span className={`inline-block px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full mb-1 ${
+                                                  item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+                                                  item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                                                  item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
+                                                  item.subcategory === 'その他' ? 'bg-zinc-800/85 text-zinc-400 border-zinc-700' :
+                                                  'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                                }`}>
+                                                  {item.subcategory || '通常'}
+                                                </span>
+                                                
+                                                {/* リアルタイム補充状況 (対応数/依頼数、残数) */}
+                                                <div className="text-xs font-bold text-gray-400 flex flex-col gap-0.5 justify-center">
+                                                  <div className="flex items-center gap-1 leading-none">
+                                                    <span>補充:</span>
+                                                    <strong className="text-emerald-400 font-extrabold">{item.fulfilledQuantity || 0}</strong>
+                                                    <span className="text-gray-500">/</span>
+                                                    <span>{item.quantity}{item.unit || '個'}</span>
+                                                  </div>
+                                                  
+                                                  {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0)) > 0 ? (
+                                                    <div className="text-[10px] font-black tracking-wider text-orange-400 leading-none mt-1">
+                                                      あと {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}{item.unit || '個'} 不足
+                                                    </div>
+                                                  ) : (
+                                                    <div className="text-[10px] font-black tracking-wider text-emerald-400 flex items-center gap-1 leading-none mt-1">
+                                                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                                      補充完了
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+
+                                              {/* 対応数の増減コントローラー */}
+                                              <div className="flex items-center bg-gray-950 border border-gray-850 rounded-xl p-1 shrink-0 shadow-inner select-none font-sans">
+                                                <button
+                                                  onClick={() => updateFulfilledQuantity(item, -1)}
+                                                  disabled={!(item.fulfilledQuantity && item.fulfilledQuantity > 0)}
+                                                  className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors text-sm font-black ${
+                                                    (item.fulfilledQuantity && item.fulfilledQuantity > 0)
+                                                      ? 'bg-gray-855 hover:bg-gray-805 active:bg-gray-750 text-gray-300'
+                                                      : 'text-gray-700 cursor-not-allowed'
+                                                  }`}
+                                                  title="-1"
+                                                >
+                                                  ー
+                                                </button>
+                                                
+                                                <div className="px-2 text-center min-w-[2.2rem]">
+                                                  <div className="text-[7px] text-gray-500 font-bold leading-none mb-0.5 uppercase tracking-wider">実績</div>
+                                                  <div className="text-xs font-black text-gray-200 leading-none">
+                                                    {item.fulfilledQuantity || 0}
+                                                  </div>
+                                                </div>
+                                                
+                                                <button
+                                                  onClick={() => updateFulfilledQuantity(item, 1)}
+                                                  disabled={item.status === 'completed'}
+                                                  className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors text-sm font-black ${
+                                                    item.status === 'completed'
+                                                      ? 'text-gray-750 cursor-not-allowed'
+                                                      : 'bg-gray-855 hover:bg-gray-805 active:bg-gray-750 text-gray-300 hover:text-white'
+                                                  }`}
+                                                  title="+1"
+                                                >
+                                                  ＋
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Controls actions col */}
+                                          <div className="flex items-center gap-1.5 shrink-0 select-none">
+                                            {/* Toggle completed button */}
+                                            <button
+                                              onClick={() => toggleStatus(item)}
+                                              className={`p-2.5 sm:p-3 rounded-xl transition-all shadow-md ${
+                                                item.status === 'completed' 
+                                                  ? 'bg-gray-800 text-gray-600 border border-gray-700/20' 
+                                                  : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/10 hover:scale-105 active:scale-95'
+                                              }`}
+                                              title={item.status === 'completed' ? '未完了に戻す' : '完了にする'}
+                                            >
+                                              <Check size={16} strokeWidth={3} />
+                                            </button>
+
+                                            <div className="flex flex-col gap-1">
+                                              {/* Inline Edit form launcher */}
+                                              <button
+                                                onClick={() => startEdit(item)}
+                                                className="p-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-xl transition-colors"
+                                                title="編集"
+                                              >
+                                                <Edit2 size={13} />
+                                              </button>
+
+                                              {/* Safety Guard styled delete */}
+                                              <button
+                                                onClick={() => {
+                                                  if (deletingId === item.id) {
+                                                    deleteItem(item.id);
+                                                  } else {
+                                                    setDeletingId(item.id);
+                                                    setTimeout(() => setDeletingId(null), 3000);
+                                                  }
+                                                }}
+                                                className={`p-2 transition-all rounded-xl ${
+                                                  deletingId === item.id 
+                                                    ? 'bg-red-600 text-white scale-110' 
+                                                    : 'text-gray-500 hover:text-red-400'
+                                                }`}
+                                                title="削除"
+                                              >
+                                                {deletingId === item.id ? <Trash2 size={13} className="animate-pulse" /> : <Trash2 size={13} />}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </motion.div>
+                                ))}
+                              </AnimatePresence>
                             </div>
                           )}
-
-                          <div className="relative z-10 p-3 sm:p-3.5 text-left">
-                            {editingId === item.id ? (
-                              <div className="space-y-3">
-                                <div className="text-[10px] text-gray-500 font-black pl-1">商品情報を編集しています</div>
-                                <input
-                                  type="text"
-                                  value={editValue.maker}
-                                  onChange={(e) => setEditValue({ ...editValue, maker: e.target.value })}
-                                  className="w-full px-4 py-2 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-xs"
-                                  placeholder="メーカー名 (任意)"
-                                />
-                                <input
-                                  type="text"
-                                  value={editValue.productName}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    const spaceMatch = val.match(/[\s　]/);
-                                    if (spaceMatch && spaceMatch.index !== undefined && !editValue.maker) {
-                                      const newMaker = val.substring(0, spaceMatch.index).trim();
-                                      const newName = val.substring(spaceMatch.index + 1).trim();
-                                      setEditValue({ ...editValue, maker: newMaker, productName: newName });
-                                    } else {
-                                      setEditValue({ ...editValue, productName: val });
-                                    }
-                                  }}
-                                  className="w-full px-4 py-3 bg-gray-950 border border-gray-800 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-sm"
-                                  placeholder="商品名"
-                                />
-                                <div className="grid grid-cols-3 gap-2">
-                                  <div>
-                                    <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">依頼数量</label>
-                                    <input
-                                      type="text"
-                                      inputMode="numeric"
-                                      value={editValue.quantity}
-                                      onChange={(e) => {
-                                        const numericVal = e.target.value.replace(/[^0-9]/g, '');
-                                        setEditValue({ ...editValue, quantity: numericVal });
-                                      }}
-                                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-xs"
-                                      placeholder="依頼数"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">現対応数</label>
-                                    <input
-                                      type="text"
-                                      inputMode="numeric"
-                                      value={editValue.fulfilledQuantity}
-                                      onChange={(e) => {
-                                        const val = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
-                                        setEditValue({ ...editValue, fulfilledQuantity: val });
-                                      }}
-                                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 text-white rounded-xl focus:border-blue-500 outline-none font-bold text-[16px] md:text-xs"
-                                      placeholder="対応数"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">単位</label>
-                                    <select
-                                      value={editValue.unit}
-                                      onChange={(e) => setEditValue({ ...editValue, unit: e.target.value })}
-                                      className="w-full px-3 py-2 bg-gray-950 border border-gray-850 text-white rounded-xl focus:border-blue-500 outline-none font-bold appearance-none text-[16px] md:text-xs cursor-pointer"
-                                    >
-                                      <option value="個">個</option>
-                                      <option value="ケース">ケース</option>
-                                      <option value="点">点</option>
-                                      <option value="箱">箱</option>
-                                    </select>
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <label className="block text-[9px] text-gray-500 font-bold mb-1 pl-1">売場サブカテゴリ</label>
-                                  <div className="flex bg-gray-950 border border-gray-850 p-1 rounded-xl gap-1 overflow-x-auto scrollbar-none">
-                                    {['通常', '催事', 'エンド', '客注', 'その他'].map((s) => (
-                                      <button
-                                        key={s}
-                                        type="button"
-                                        onClick={() => setEditValue({ ...editValue, subcategory: s })}
-                                        className={`flex-1 min-w-[3.2rem] py-1.5 text-[11px] font-black rounded-lg transition-all ${
-                                          editValue.subcategory === s 
-                                            ? 'bg-blue-600 text-white' 
-                                            : 'text-gray-500 hover:text-gray-300'
-                                        }`}
-                                      >
-                                        {s}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div className="flex gap-2 pt-1.5">
-                                  <button onClick={saveEdit} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl flex items-center justify-center gap-1.5 font-black shadow-lg shadow-blue-500/10 text-xs">
-                                    <Save size={14} /> 反映する
-                                  </button>
-                                  <button onClick={() => setEditingId(null)} className="flex-1 py-2.5 bg-gray-800 text-gray-400 rounded-xl font-bold text-xs">
-                                    キャンセル
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
-                                      item.status === 'completed' ? 'bg-gray-800 text-gray-500 border border-gray-700/30' : 'bg-blue-600 text-white'
-                                    }`}>
-                                      {item.status === 'completed' ? '完了' : '未対応'}
-                                    </span>
-                                    <span className="text-[10px] text-gray-500 font-mono tracking-tight font-bold">{item.janCode}</span>
-                                    <span className="text-[10px] text-gray-500 ml-auto font-mono">{formatDate(item.createdAt)}</span>
-                                  </div>
-                                  
-                                  <h3 className={`text-xs sm:text-sm font-black leading-tight mb-2 truncate ${item.status === 'completed' ? 'line-through text-gray-600' : 'text-gray-100'}`}>
-                                    {item.productName}
-                                  </h3>
-                                  
-                                  <div className="flex flex-wrap items-center justify-between gap-3 mt-1.5 pt-2 border-t border-gray-800/40">
-                                    <div className="flex-1 min-w-0">
-                                      {item.maker && (
-                                        <span className="inline-block px-1.5 py-0.5 bg-gray-800/80 text-gray-400 text-[9px] font-medium rounded-md truncate max-w-full mb-1 mr-1">
-                                          {item.maker}
-                                        </span>
-                                      )}
-                                      <span className={`inline-block px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full mb-1 ${
-                                        item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
-                                        item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                                        item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
-                                        item.subcategory === 'その他' ? 'bg-zinc-800/85 text-zinc-400 border-zinc-700' :
-                                        'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                                      }`}>
-                                        {item.subcategory || '通常'}
-                                      </span>
-                                      
-                                      {/* リアルタイム補充状況 (対応数/依頼数、残数) */}
-                                      <div className="text-xs font-bold text-gray-400 flex flex-col gap-0.5 justify-center">
-                                        <div className="flex items-center gap-1 leading-none">
-                                          <span>補充:</span>
-                                          <strong className="text-emerald-400 font-extrabold">{item.fulfilledQuantity || 0}</strong>
-                                          <span className="text-gray-500">/</span>
-                                          <span>{item.quantity}{item.unit || '個'}</span>
-                                        </div>
-                                        
-                                        {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0)) > 0 ? (
-                                          <div className="text-[10px] font-black tracking-wider text-orange-400 leading-none mt-1">
-                                            あと {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}{item.unit || '個'} 不足
-                                          </div>
-                                        ) : (
-                                          <div className="text-[10px] font-black tracking-wider text-emerald-400 flex items-center gap-1 leading-none mt-1">
-                                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                                            補充完了
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    {/* 対応数の増減コントローラー */}
-                                    <div className="flex items-center bg-gray-950 border border-gray-850 rounded-xl p-1 shrink-0 shadow-inner select-none">
-                                      <button
-                                        onClick={() => updateFulfilledQuantity(item, -1)}
-                                        disabled={!(item.fulfilledQuantity && item.fulfilledQuantity > 0)}
-                                        className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors text-sm font-black ${
-                                          (item.fulfilledQuantity && item.fulfilledQuantity > 0)
-                                            ? 'bg-gray-855 hover:bg-gray-805 active:bg-gray-750 text-gray-300'
-                                            : 'text-gray-700 cursor-not-allowed'
-                                        }`}
-                                        title="-1"
-                                      >
-                                        ー
-                                      </button>
-                                      
-                                      <div className="px-2 text-center min-w-[2.2rem]">
-                                        <div className="text-[7px] text-gray-500 font-bold leading-none mb-0.5 uppercase tracking-wider">実績</div>
-                                        <div className="text-xs font-black text-gray-200 leading-none">
-                                          {item.fulfilledQuantity || 0}
-                                        </div>
-                                      </div>
-                                      
-                                      <button
-                                        onClick={() => updateFulfilledQuantity(item, 1)}
-                                        disabled={item.status === 'completed'}
-                                        className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors text-sm font-black ${
-                                          item.status === 'completed'
-                                            ? 'text-gray-750 cursor-not-allowed'
-                                            : 'bg-gray-855 hover:bg-gray-805 active:bg-gray-750 text-gray-300 hover:text-white'
-                                        }`}
-                                        title="+1"
-                                      >
-                                        ＋
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Controls actions col */}
-                                <div className="flex items-center gap-1.5 shrink-0 select-none">
-                                  {/* Toggle completed button */}
-                                  <button
-                                    onClick={() => toggleStatus(item)}
-                                    className={`p-2.5 sm:p-3 rounded-xl transition-all shadow-md ${
-                                      item.status === 'completed' 
-                                        ? 'bg-gray-800 text-gray-600 border border-gray-700/20' 
-                                        : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/10 hover:scale-105 active:scale-95'
-                                    }`}
-                                    title={item.status === 'completed' ? '未完了に戻す' : '完了にする'}
-                                  >
-                                    <Check size={16} strokeWidth={3} />
-                                  </button>
-
-                                  <div className="flex flex-col gap-1">
-                                    {/* Inline Edit form launcher */}
-                                    <button
-                                      onClick={() => startEdit(item)}
-                                      className="p-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-xl transition-colors"
-                                      title="編集"
-                                    >
-                                      <Edit2 size={13} />
-                                    </button>
-
-                                    {/* Safety Guard styled delete */}
-                                    <button
-                                      onClick={() => {
-                                        if (deletingId === item.id) {
-                                          deleteItem(item.id);
-                                        } else {
-                                          setDeletingId(item.id);
-                                          setTimeout(() => setDeletingId(null), 3000);
-                                        }
-                                      }}
-                                      className={`p-2 transition-all rounded-xl ${
-                                        deletingId === item.id 
-                                          ? 'bg-red-600 text-white scale-110' 
-                                          : 'text-gray-500 hover:text-red-400'
-                                      }`}
-                                      title="削除"
-                                    >
-                                      {deletingId === item.id ? <Trash2 size={13} className="animate-pulse" /> : <Trash2 size={13} />}
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
