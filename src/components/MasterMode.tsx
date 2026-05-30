@@ -106,6 +106,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   const [newSize, setNewSize] = useState('');
   const [newRemarks, setNewRemarks] = useState('');
   const [newUnit, setNewUnit] = useState('個');
+  const [newGenre, setNewGenre] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [pasteSuccess, setPasteSuccess] = useState(false);
 
@@ -116,6 +117,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   const [editSize, setEditSize] = useState('');
   const [editRemarks, setEditRemarks] = useState('');
   const [editUnit, setEditUnit] = useState('個');
+  const [editGenre, setEditGenre] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   // Delete confirm state
@@ -145,7 +147,8 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   }, []);
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [filterOnlyStd, setFilterOnlyStd] = useState(false);
+  const [filterStd, setFilterStd] = useState<'all' | 'std' | 'unregistered'>('all');
+  const [filterGenre, setFilterGenre] = useState<string>('all');
 
   // CSV Import/Export States
   const [csvPreviewItems, setCsvPreviewItems] = useState<any[]>([]);
@@ -188,7 +191,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
     try {
       const csvContent = "\uFEFF" + [ // Add BOM for Excel compatibility in Japanese encoding
-        ['JANコード', '商品名', 'メーカー', 'サイズ', '単位', '備考'].join(','),
+        ['JANコード', '商品名', 'メーカー', 'サイズ', '単位', '備考', 'ジャンル'].join(','),
         ...items.map(item => [
           `"${(item.janCode || '').replace(/"/g, '""')}"`,
           `"${(item.productName || '').replace(/"/g, '""')}"`,
@@ -196,6 +199,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
           `"${(item.size || '').replace(/"/g, '""')}"`,
           `"${(item.unit || '').replace(/"/g, '""')}"`,
           `"${(item.remarks || '').replace(/"/g, '""')}"`,
+          `"${(item.genre || '').replace(/"/g, '""')}"`,
         ].join(','))
       ].join('\r\n');
 
@@ -254,6 +258,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     let sizeIdx = -1;
     let unitIdx = -1;
     let remarksIdx = -1;
+    let genreIdx = -1;
 
     headerRow.forEach((h, index) => {
       const headerStr = h.trim().toLowerCase();
@@ -269,6 +274,8 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         unitIdx = index;
       } else if (['備考', '備考(保管場所や発注詳細など)', 'remarks', 'memo', 'メモ'].includes(headerStr)) {
         remarksIdx = index;
+      } else if (['ジャンル', '分類', 'カテゴリ', 'category', 'genre'].includes(headerStr)) {
+        genreIdx = index;
       }
     });
 
@@ -279,6 +286,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     if (sizeIdx === -1 && headerRow.length > 3) sizeIdx = 3;
     if (unitIdx === -1 && headerRow.length > 4) unitIdx = 4;
     if (remarksIdx === -1 && headerRow.length > 5) remarksIdx = 5;
+    if (genreIdx === -1 && headerRow.length > 6) genreIdx = 6;
 
     if (janIdx === -1 || nameIdx === -1) {
       alert("JANコード及び商品名に該当する列が見つかりません。ヘッダー（1行目）に「JANコード」と「商品名」を記載してください。");
@@ -304,7 +312,8 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         maker: makerIdx !== -1 && cols[makerIdx] ? cols[makerIdx].trim() : '',
         size: sizeIdx !== -1 && cols[sizeIdx] ? cols[sizeIdx].trim() : '',
         unit: unitIdx !== -1 && cols[unitIdx] ? cols[unitIdx].trim() : '個',
-        remarks: remarksIdx !== -1 && cols[remarksIdx] ? cols[remarksIdx].trim() : ''
+        remarks: remarksIdx !== -1 && cols[remarksIdx] ? cols[remarksIdx].trim() : '',
+        genre: genreIdx !== -1 && cols[genreIdx] ? cols[genreIdx].trim() : ''
       });
     }
 
@@ -341,6 +350,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
           size: itemData.size || null,
           unit: itemData.unit || null,
           remarks: itemData.remarks || null,
+          genre: itemData.genre || null,
         };
 
         const existingId = existingMap.get(itemData.janCode);
@@ -507,10 +517,28 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
   // Filter items in UI
   const filteredItems = items.filter(item => {
-    if (filterOnlyStd) {
+    // 1. STD classification filter
+    if (filterStd === 'std') {
       const isStd = standardItems.some(std => std.janCode === item.janCode);
       if (!isStd) return false;
+    } else if (filterStd === 'unregistered') {
+      const isStd = standardItems.some(std => std.janCode === item.janCode);
+      if (isStd) return false;
     }
+
+    // 2. Genre filter
+    if (filterGenre !== 'all') {
+      if (filterGenre === 'unassigned') {
+        const hasGenre = item.genre && item.genre.trim() !== '';
+        if (hasGenre) return false;
+      } else {
+        if (item.genre !== filterGenre) {
+          return false;
+        }
+      }
+    }
+
+    // 3. Search text filter
     const term = search.toLowerCase();
     return (
       item.productName.toLowerCase().includes(term) ||
@@ -562,6 +590,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         size: newSize.trim() || null,
         remarks: newRemarks.trim() || null,
         unit: newUnit || null,
+        genre: newGenre.trim() || null,
         createdAt: serverTimestamp()
       });
       // Reset form states
@@ -571,6 +600,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       setNewSize('');
       setNewRemarks('');
       setNewUnit('個');
+      setNewGenre('');
       setShowAddForm(false);
     } catch (err) {
       console.error("Failed to register master item:", err);
@@ -588,6 +618,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     setEditSize(item.size || '');
     setEditRemarks(item.remarks || '');
     setEditUnit(item.unit || '個');
+    setEditGenre(item.genre || '');
   }
 
   // Cancel edit
@@ -608,7 +639,8 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         maker: editMaker.trim() || null,
         size: editSize.trim() || null,
         remarks: editRemarks.trim() || null,
-        unit: editUnit || null
+        unit: editUnit || null,
+        genre: editGenre.trim() || null
       });
       setEditingId(null);
     } catch (err) {
@@ -685,63 +717,95 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
       {/* SEARCH / CONTROLS */}
       <div className="p-4 bg-gray-900/50 border-b border-gray-800 shrink-0">
-        <div className="max-w-xl mx-auto flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="品番（JAN）、商品名、メーカー、サイズから検索..."
-              className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 text-xs font-bold placeholder:text-gray-500 text-white outline-none transition-all"
-            />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
-            {search && (
+        <div className="max-w-xl mx-auto flex flex-col gap-3">
+          {/* Main search and CSV actions row */}
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="品番（JAN）、商品名、メーカー、サイズから検索..."
+                className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 text-xs font-bold placeholder:text-gray-500 text-white outline-none transition-all"
+              />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-700 hover:bg-gray-650 rounded-full text-gray-400"
+                >
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+            
+            <div className="flex gap-2">
               <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-700 hover:bg-gray-650 rounded-full text-gray-400"
+                onClick={handleCsvExport}
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                title="マスタ全件をCSVダウンロード"
               >
-                <X size={10} />
+                <Download size={13} className="text-blue-400" />
+                CSV出力
               </button>
-            )}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                title="CSVファイルをアップロードして一括登録・更新"
+              >
+                <Upload size={13} className="text-teal-400" />
+                CSV取込
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".csv"
+                className="hidden"
+              />
+            </div>
           </div>
-          
-          <div className="flex gap-2">
-            <button
-              onClick={() => setFilterOnlyStd(!filterOnlyStd)}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 border font-extrabold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap ${
-                filterOnlyStd 
-                  ? 'bg-amber-600 hover:bg-amber-550 border-amber-500 text-white shadow-md shadow-amber-950/25' 
-                  : 'bg-gray-800 hover:bg-gray-750 border-gray-700 text-amber-500'
-              }`}
-              title="定番(STD)として起用されている商品のみを絞り込んでリストアップ"
-            >
-              <Star size={13} className={filterOnlyStd ? "fill-white text-white" : "fill-amber-500 text-amber-500"} />
-              {filterOnlyStd ? 'すべて表示' : 'STDのみ表示'}
-            </button>
 
-            <button
-              onClick={handleCsvExport}
-              className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-              title="マスタ全件をCSVダウンロード"
-            >
-              <Download size={13} className="text-blue-400" />
-              CSV出力
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-              title="CSVファイルをアップロードして一括登録・更新"
-            >
-              <Upload size={13} className="text-teal-400" />
-              CSV取込
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".csv"
-              className="hidden"
-            />
+          {/* Detailed filters row */}
+          <div className="grid grid-cols-2 gap-2.5 bg-gray-900/60 p-3 rounded-2xl border border-gray-800/85">
+            {/* STD classification selector */}
+            <div className="flex flex-col text-left gap-1.5">
+              <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
+                <Star size={10} className="fill-amber-500 text-amber-500" />
+                STD区分
+              </span>
+              <select
+                value={filterStd}
+                onChange={(e) => setFilterStd(e.target.value as any)}
+                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
+              >
+                <option value="all">全て表示</option>
+                <option value="std">⭐️ STD登録済み のみ</option>
+                <option value="unregistered">⚪️ STD未登録 のみ</option>
+              </select>
+            </div>
+
+            {/* Genre classification selector */}
+            <div className="flex flex-col text-left gap-1.5">
+              <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
+                <Filter size={10} className="text-purple-400" />
+                ジャンル
+              </span>
+              <select
+                value={filterGenre}
+                onChange={(e) => setFilterGenre(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
+              >
+                <option value="all">すべてのジャンル</option>
+                <option value="unassigned">未設定 (またはその他)</option>
+                <option value="水・炭酸水">水・炭酸水</option>
+                <option value="茶系飲料">茶系飲料</option>
+                <option value="ジュース">ジュース</option>
+                <option value="紅茶・コーヒー">紅茶・コーヒー</option>
+                <option value="健康飲料">健康飲料</option>
+                <option value="エナジー飲料">エナジー飲料</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -852,6 +916,23 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                         </div>
 
                         <div className="col-span-2 space-y-1">
+                          <label className="text-[10px] text-gray-400 font-black uppercase">ジャンル (分類)</label>
+                          <select
+                            value={editGenre}
+                            onChange={(e) => setEditGenre(e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-xs text-white outline-none"
+                          >
+                            <option value="">未設定 (またはその他)</option>
+                            <option value="水・炭酸水">水・炭酸水</option>
+                            <option value="茶系飲料">茶系飲料</option>
+                            <option value="ジュース">ジュース</option>
+                            <option value="紅茶・コーヒー">紅茶・コーヒー</option>
+                            <option value="健康飲料">健康飲料</option>
+                            <option value="エナジー飲料">エナジー飲料</option>
+                          </select>
+                        </div>
+
+                        <div className="col-span-2 space-y-1">
                           <label className="text-[10px] text-gray-400 font-black uppercase">備考</label>
                           <input
                             type="text"
@@ -890,6 +971,11 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                           {item.unit && (
                             <span className="text-[10px] font-extrabold text-teal-400 bg-teal-950/30 border border-teal-900/30 px-1.5 py-0.5 rounded-md flex items-center gap-1">
                               単位: {item.unit}
+                            </span>
+                          )}
+                          {item.genre && (
+                            <span className="text-[10px] font-black text-purple-400 bg-purple-950/30 border border-purple-900/30 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                              ジャンル: {item.genre}
                             </span>
                           )}
                         </div>
@@ -1079,6 +1165,24 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                       <option value="缶">缶</option>
                       <option value="シート">シート</option>
                       <option value="その他">その他</option>
+                    </select>
+                  </div>
+
+                  {/* Genre */}
+                  <div className="col-span-2 space-y-1.5">
+                    <label className="block text-gray-400 font-black uppercase tracking-wider pl-0.5">ジャンル (分類)</label>
+                    <select
+                      value={newGenre}
+                      onChange={(e) => setNewGenre(e.target.value)}
+                      className="w-full px-4 py-3.5 bg-gray-800 border border-gray-700 text-white rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 outline-none font-bold text-sm"
+                    >
+                      <option value="">未設定 (またはその他)</option>
+                      <option value="水・炭酸水">水・炭酸水</option>
+                      <option value="茶系飲料">茶系飲料</option>
+                      <option value="ジュース">ジュース</option>
+                      <option value="紅茶・コーヒー">紅茶・コーヒー</option>
+                      <option value="健康飲料">健康飲料</option>
+                      <option value="エナジー飲料">エナジー飲料</option>
                     </select>
                   </div>
                 </div>

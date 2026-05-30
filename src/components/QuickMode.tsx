@@ -10,7 +10,9 @@ import {
   TrendingUp, 
   Star, 
   Building,
-  GripVertical
+  GripVertical,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { 
@@ -24,6 +26,16 @@ import {
   onSnapshot 
 } from 'firebase/firestore';
 import { ProductMasterItem } from '../types';
+
+const MASTER_GENRES = [
+  '水・炭酸水',
+  '茶系飲料',
+  'ジュース',
+  '紅茶・コーヒー',
+  '健康飲料',
+  'エナジー飲料',
+  'その他'
+];
 
 interface QuickModeProps {
   onBack: () => void;
@@ -39,8 +51,10 @@ export default function QuickMode({ onBack }: QuickModeProps) {
   const [isReorderingMode, setIsReorderingMode] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [draggedGenre, setDraggedGenre] = useState<string | null>(null);
   const touchStartY = useRef<number>(0);
   const touchStartIndex = useRef<number | null>(null);
+  const [collapsedGenres, setCollapsedGenres] = useState<Record<string, boolean>>({});
   
   // Order parameters
   const [quantity, setQuantity] = useState(1);
@@ -100,7 +114,8 @@ export default function QuickMode({ onBack }: QuickModeProps) {
         maker: master.maker || '',
         size: master.size || '',
         unit: master.unit || '個',
-        remarks: master.remarks || ''
+        remarks: master.remarks || '',
+        genre: master.genre || 'その他'
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -127,7 +142,8 @@ export default function QuickMode({ onBack }: QuickModeProps) {
   });
 
   // Drag and Drop & Touch Sorting Handlers
-  const handleDragStart = (index: number) => {
+  const handleDragStart = (genre: string, index: number) => {
+    setDraggedGenre(genre);
     setDraggedIndex(index);
   };
 
@@ -135,24 +151,44 @@ export default function QuickMode({ onBack }: QuickModeProps) {
     e.preventDefault(); // Required to allow drop functionality
   };
 
-  const handleDragEnter = (index: number) => {
-    if (draggedIndex === null || draggedIndex === index) return;
+  const handleDragEnter = (genre: string, index: number) => {
+    if (draggedGenre === null || draggedGenre !== genre || draggedIndex === null || draggedIndex === index) return;
 
-    const workingList = [...sortedItems];
-    const draggedItem = workingList[draggedIndex];
+    // Get all items in the current active genre from the current sortedItems
+    const genreItems = sortedItems.filter(item => (item.genre || 'その他') === genre);
+    const draggedItem = genreItems[draggedIndex];
 
-    // Rearrange item position inside array
-    workingList.splice(draggedIndex, 1);
-    workingList.splice(index, 0, draggedItem);
+    if (!draggedItem) return;
+
+    // Rearrange item position inside subarray
+    genreItems.splice(draggedIndex, 1);
+    genreItems.splice(index, 0, draggedItem);
+
+    // Reconstruct the new flat list with stable sequential sortOrders per genre
+    const newFlatList: any[] = [];
+    let globalCounter = 0;
+    
+    MASTER_GENRES.forEach((g) => {
+      const itemsOfGenre = g === genre
+        ? genreItems
+        : sortedItems.filter(item => (item.genre || 'その他') === g);
+        
+      itemsOfGenre.forEach((item) => {
+        newFlatList.push({
+          ...item,
+          sortOrder: globalCounter++
+        });
+      });
+    });
 
     // Optimistically update standardItems order state for smooth layout animation
-    const reindexedItems = workingList.map((item, idx) => ({ ...item, sortOrder: idx }));
-    setStandardItems(reindexedItems);
+    setStandardItems(newFlatList);
     setDraggedIndex(index);
   };
 
   const handleDragEnd = async () => {
     setDraggedIndex(null);
+    setDraggedGenre(null);
     try {
       // Re-index all active items in standard_items on Firestore to store stable, non-temporary indexes
       const promises = sortedItems.map((item, idx) => 
@@ -166,27 +202,29 @@ export default function QuickMode({ onBack }: QuickModeProps) {
     }
   };
 
-  const handleTouchStart = (index: number, e: React.TouchEvent) => {
+  const handleTouchStart = (genre: string, index: number, e: React.TouchEvent) => {
     if (!isReorderingMode) return;
     touchStartY.current = e.touches[0].clientY;
     touchStartIndex.current = index;
+    setDraggedGenre(genre);
     setDraggedIndex(index);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isReorderingMode || touchStartIndex.current === null) return;
+    if (!isReorderingMode || touchStartIndex.current === null || !draggedGenre) return;
     const currentY = e.touches[0].clientY;
 
     // Retrieve active element under finger positioning dynamically
     const element = document.elementFromPoint(e.touches[0].clientX, currentY);
     if (!element) return;
 
-    // Search for a list item container with data-idx attribute
-    const itemContainer = element.closest('[data-idx]');
+    // Search for a list item container with data-genre-idx attribute
+    const itemContainer = element.closest('[data-genre-idx]');
     if (itemContainer) {
-      const targetIndex = parseInt(itemContainer.getAttribute('data-idx') || '', 10);
-      if (!isNaN(targetIndex) && targetIndex !== draggedIndex && draggedIndex !== null) {
-        handleDragEnter(targetIndex);
+      const targetGenre = itemContainer.getAttribute('data-genre');
+      const targetIndex = parseInt(itemContainer.getAttribute('data-genre-idx') || '', 10);
+      if (targetGenre === draggedGenre && !isNaN(targetIndex) && targetIndex !== draggedIndex && draggedIndex !== null) {
+        handleDragEnter(draggedGenre, targetIndex);
       }
     }
   };
@@ -317,70 +355,106 @@ export default function QuickMode({ onBack }: QuickModeProps) {
               </p>
             </div>
           ) : (
-            filteredItems.map((item, idx) => {
-              const isFirst = idx === 0;
-              const isLast = idx === filteredItems.length - 1;
-              const isCurrentlyDragged = draggedIndex === idx;
-              
-              return (
-                <div
-                  key={item.id}
-                  data-idx={idx}
-                  draggable={isReorderingMode}
-                  onDragStart={() => handleDragStart(idx)}
-                  onDragOver={handleDragOver}
-                  onDragEnter={() => handleDragEnter(idx)}
-                  onDragEnd={handleDragEnd}
-                  onTouchStart={(e) => handleTouchStart(idx, e)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
-                  className={`bg-white border rounded-2xl p-3 flex items-center justify-between hover:shadow-md transition-all relative overflow-hidden select-none ${
-                    isReorderingMode 
-                      ? 'cursor-grab active:cursor-grabbing border-amber-200 bg-amber-50/5/20 shadow-sm' 
-                      : 'border-gray-200/60'
-                  } ${isCurrentlyDragged ? 'opacity-40 border-dashed border-amber-500 bg-amber-50/30 scale-[0.98]' : ''}`}
-                >
-                  <div className="flex-1 min-w-0 pr-4 text-left">
-                    <div className="flex flex-wrap items-center gap-1.5 mb-1 text-[9px] font-bold">
-                      {item.maker && (
-                        <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-0.5 border border-amber-100/50">
-                          <Building size={8} />
-                          {item.maker}
-                        </span>
-                      )}
-                      {item.size && (
-                        <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-md">
-                          {item.size}
-                        </span>
-                      )}
-                      <span className="text-[8px] font-mono font-bold text-gray-400 bg-gray-50 px-1 rounded border border-gray-100">
-                        JAN: {item.janCode}
-                      </span>
-                    </div>
+            /* Collapsible sections grouped by genre (supported for both Normal and Reordering modes) */
+            <div className="space-y-4">
+              {MASTER_GENRES.map((genre) => {
+                const genreItems = filteredItems.filter(item => (item.genre || 'その他') === genre);
+                if (genreItems.length === 0) return null;
 
-                    <h3 className="text-xs font-extrabold text-gray-900 leading-snug truncate">
-                      {item.displayName}
-                    </h3>
-                  </div>
+                const isCollapsed = collapsedGenres[genre] ?? false;
 
-                  {/* ACTION CONTROLS DEPENDING ON CURRENT MODE */}
-                  {isReorderingMode ? (
-                    /* REORDER MODE: Touch & Move Grip Handle */
-                    <div className="flex items-center gap-1 shrink-0 p-2 rounded-xl bg-amber-50 border border-amber-200/50 cursor-grab active:cursor-grabbing">
-                      <GripVertical size={16} strokeWidth={2.5} className="text-amber-600 animate-pulse" />
-                    </div>
-                  ) : (
-                    /* NORMAL MODE: Simple Click to Replenish Card */
+                return (
+                  <div key={genre} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden text-left">
+                    {/* Fold / Unfold trigger button */}
                     <button
-                      onClick={() => handleSelectItem(item)}
-                      className="px-3.5 py-2.5 bg-gray-900 hover:bg-amber-600 text-white hover:text-white rounded-xl font-bold text-[10px] active:scale-95 transition-all truncate shrink-0 cursor-pointer shadow-sm shadow-gray-200/50"
+                      type="button"
+                      onClick={() => setCollapsedGenres(prev => ({ ...prev, [genre]: !prev[genre] }))}
+                      className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between border-b border-gray-100 hover:bg-gray-100/50 transition-colors cursor-pointer select-none"
                     >
-                      補 充
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-3.5 bg-amber-500 rounded-full" />
+                        <span className="text-xs font-black text-gray-800">{genre}</span>
+                        <span className="text-[10px] font-black text-gray-500 bg-gray-200/50 px-2 py-0.5 rounded-full font-mono">
+                          {genreItems.length}
+                        </span>
+                      </div>
+                      <div className="text-gray-400">
+                        {isCollapsed ? (
+                          <ChevronDown size={14} strokeWidth={3} />
+                        ) : (
+                          <ChevronUp size={14} strokeWidth={3} />
+                        )}
+                      </div>
                     </button>
-                  )}
-                </div>
-              );
-            })
+
+                    {/* Subitems under this genre category */}
+                    {!isCollapsed && (
+                      <div className="p-3 space-y-2.5">
+                        {genreItems.map((item, subIdx) => {
+                          const isCurrentlyDragged = draggedGenre === genre && draggedIndex === subIdx;
+                          return (
+                            <div
+                              key={item.id}
+                              data-genre={genre}
+                              data-genre-idx={subIdx}
+                              draggable={isReorderingMode}
+                              onDragStart={() => handleDragStart(genre, subIdx)}
+                              onDragOver={handleDragOver}
+                              onDragEnter={() => handleDragEnter(genre, subIdx)}
+                              onDragEnd={handleDragEnd}
+                              onTouchStart={(e) => handleTouchStart(genre, subIdx, e)}
+                              onTouchMove={handleTouchMove}
+                              onTouchEnd={handleTouchEnd}
+                              className={`bg-white border rounded-2xl p-3 flex items-center justify-between hover:shadow-md transition-all relative overflow-hidden select-none ${
+                                isReorderingMode 
+                                  ? 'cursor-grab active:cursor-grabbing border-amber-200 bg-amber-50/5 shadow-sm' 
+                                  : 'border-gray-100 hover:border-amber-100'
+                              } ${isCurrentlyDragged ? 'opacity-40 border-dashed border-amber-500 bg-amber-50/30 scale-[0.98]' : ''}`}
+                            >
+                              <div className="flex-1 min-w-0 pr-4 text-left">
+                                <div className="flex flex-wrap items-center gap-1.5 mb-1 text-[9px] font-bold">
+                                  {item.maker && (
+                                    <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-0.5 border border-amber-100/50">
+                                      <Building size={8} />
+                                      {item.maker}
+                                    </span>
+                                  )}
+                                  {item.size && (
+                                    <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-md">
+                                      {item.size}
+                                    </span>
+                                  )}
+                                  <span className="text-[8px] font-mono font-bold text-gray-400 bg-gray-50 px-1 rounded border border-gray-100">
+                                    JAN: {item.janCode}
+                                  </span>
+                                </div>
+
+                                <h3 className="text-xs font-extrabold text-gray-900 leading-snug truncate">
+                                  {item.displayName}
+                                </h3>
+                              </div>
+
+                              {isReorderingMode ? (
+                                <div className="flex items-center gap-1 shrink-0 p-2 rounded-xl bg-amber-50 border border-amber-200/50 cursor-grab active:cursor-grabbing">
+                                  <GripVertical size={16} strokeWidth={2.5} className="text-amber-600 animate-pulse" />
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleSelectItem(item)}
+                                  className="px-3.5 py-2.5 bg-gray-900 hover:bg-amber-600 text-white hover:text-white rounded-xl font-bold text-[10px] active:scale-95 transition-all truncate shrink-0 cursor-pointer shadow-sm shadow-gray-200/50"
+                                >
+                                  補 充
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
