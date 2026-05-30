@@ -112,6 +112,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
   // Edit states
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editJan, setEditJan] = useState('');
   const [editName, setEditName] = useState('');
   const [editMaker, setEditMaker] = useState('');
   const [editSize, setEditSize] = useState('');
@@ -613,6 +614,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   // Start edit handler
   function startEdit(item: ProductMasterItem) {
     setEditingId(item.id);
+    setEditJan(item.janCode);
     setEditName(item.productName);
     setEditMaker(item.maker || '');
     setEditSize(item.size || '');
@@ -628,13 +630,24 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
   // Save edit handler
   async function handleSaveEdit(id: string) {
+    const janClean = editJan.trim();
+    if (!janClean) {
+      alert("JANコードは必須項目です。");
+      return;
+    }
     if (!editName.trim()) {
       alert("商品名は必須です。");
+      return;
+    }
+    const duplicate = items.find(item => item.janCode === janClean && item.id !== id);
+    if (duplicate) {
+      alert(`このJANコード（${janClean}）はすでに「${duplicate.productName}」として登録されています。`);
       return;
     }
     setIsSaving(true);
     try {
       await updateDoc(doc(db, 'product_master', id), {
+        janCode: janClean,
         productName: editName.trim(),
         maker: editMaker.trim() || null,
         size: editSize.trim() || null,
@@ -691,20 +704,6 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         </div>
 
         <div className="flex gap-2">
-          {standardItems.length > 0 && (
-            <button
-              onClick={handleSyncFromStandard}
-              disabled={isSyncing}
-              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl active:scale-95 transition-all shadow-lg shadow-emerald-950/10 disabled:opacity-50 cursor-pointer"
-            >
-              {isSyncing ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <RefreshCw size={13} />
-              )}
-              STD一括反映
-            </button>
-          )}
           <button
             onClick={() => setShowAddForm(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl active:scale-95 transition-all shadow-lg shadow-blue-950/20 cursor-pointer"
@@ -843,7 +842,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                       <div className="flex items-center justify-between border-b border-gray-800 pb-2 mb-2">
                         <span className="text-xs font-bold font-mono text-gray-400 flex items-center gap-1.5">
                           <Barcode size={13} className="text-blue-400" />
-                          JAN: {item.janCode}
+                          商品マスタ編集
                         </span>
                         <div className="flex gap-2">
                           <button
@@ -864,6 +863,18 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                       </div>
 
                       <div className="grid grid-cols-2 gap-3.5">
+                        <div className="col-span-2 space-y-1">
+                          <label className="text-[10px] text-gray-400 font-black uppercase">JANコード (必須・数字)</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={editJan}
+                            onChange={(e) => setEditJan(e.target.value.replace(/[^0-9]/g, ''))}
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-650 font-bold text-xs text-white"
+                            placeholder="JANコード"
+                          />
+                        </div>
+
                         <div className="col-span-2 space-y-1">
                           <label className="text-[10px] text-gray-400 font-black uppercase">商品名 (必須)</label>
                           <input

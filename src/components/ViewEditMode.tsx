@@ -326,6 +326,21 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
   };
 
   const sortAlphabetically = (a: ReplenishmentItem, b: ReplenishmentItem) => {
+    const priority = (sub?: string) => {
+      if (sub === '客注') return 0;
+      if (sub === '催事') return 1;
+      if (sub === 'エンド') return 2;
+      if (sub === 'その他') return 4;
+      return 3; // '通常' or default/undefined
+    };
+
+    const priA = priority(a.subcategory);
+    const priB = priority(b.subcategory);
+
+    if (priA !== priB) {
+      return priA - priB;
+    }
+
     return a.productName.localeCompare(b.productName, 'ja-JP');
   };
 
@@ -553,7 +568,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
 
                             {!isCollapsed && (
                               <div className="p-4 pt-1 border-t border-gray-800/40">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mt-2">
                                   <AnimatePresence initial={false}>
                                     {genreItems.map((item) => (
                                       <motion.div
@@ -562,63 +577,71 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                         initial={{ opacity: 0, scale: 0.95 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         exit={{ opacity: 0, scale: 0.95 }}
-                                        className="group relative bg-gray-900 rounded-2xl aspect-[16/9] xs:aspect-auto xs:h-36 sm:h-38 lg:h-40 overflow-hidden border border-gray-800/60 shadow-2xl flex flex-col"
+                                        className="group relative bg-gray-900 border border-gray-800/65 rounded-xl p-3 shadow-md flex flex-col justify-between text-left hover:border-gray-700/65 transition-colors"
                                       >
-                                        {/* Background product image container */}
-                                        {item.imageUrl ? (
-                                          <img 
-                                            src={item.imageUrl} 
-                                            alt={item.productName} 
-                                            className="absolute inset-0 w-full h-full object-contain p-3 bg-white transition-all duration-700 group-hover:scale-105 animate-fade-in" 
-                                            referrerPolicy="no-referrer"
-                                          />
-                                        ) : (
-                                          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-gray-700">
-                                            <Package size={36} strokeWidth={1} className="opacity-30" />
-                                          </div>
-                                        )}
-
-                                        {/* Linear Gradient dimming on top of the image to keep text legible */}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/60 to-transparent"></div>
-
-                                        {/* Content overlay tags and values */}
-                                        <div className="absolute inset-x-0 bottom-0 p-3 sm:p-3.5 z-10 text-left">
-                                          <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono mb-1">
-                                            <Hash size={11} className="text-blue-400" /> {item.janCode}
-                                            <span className="opacity-20 flex">|</span>
-                                            <Clock size={11} className="text-gray-500" /> {formatTime(item.createdAt)}
-                                          </div>
-                                          
-                                          <h3 className="text-xs sm:text-sm font-black text-white leading-tight mb-1.5 drop-shadow-md truncate">
-                                            {item.productName}
-                                          </h3>
-                                          
-                                          <div className="flex items-end justify-between gap-2.5">
-                                            <div className="flex-1 min-w-0">
-                                              {item.maker && (
-                                                <span className="inline-block mb-1 mr-1 px-1.5 py-0.5 bg-white/10 backdrop-blur-md text-white text-[9px] font-black rounded-md border border-white/25 uppercase tracking-wider truncate max-w-full">
+                                        <div className="flex flex-col h-full justify-between">
+                                          <div>
+                                            {/* 1行目: メーカー｜サブカテゴリ */}
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              {item.maker ? (
+                                                <span className="px-1.5 py-0.5 bg-gray-800 text-gray-400 text-[10px] font-black rounded-md truncate max-w-[120px]">
                                                   {item.maker}
                                                 </span>
+                                              ) : (
+                                                <span className="px-1.5 py-0.5 bg-gray-950/40 text-gray-600 text-[10px] font-bold rounded-md">
+                                                  メーカーなし
+                                                </span>
                                               )}
-                                              <span className={`inline-block mb-1 px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full ${
+                                              <span className="text-gray-750 text-[10px] select-none font-bold">|</span>
+                                              <span className={`px-1.5 py-0.5 text-[10px] font-black rounded-md border uppercase tracking-wider truncate ${
                                                 item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
                                                 item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
                                                 item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
                                                 item.subcategory === 'その他' ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/60' :
-                                                'bg-blue-500/20 text-blue-350 border-blue-500/30'
+                                                'bg-blue-500/20 text-blue-355 border-blue-500/30'
                                               }`}>
                                                 {item.subcategory || '通常'}
                                               </span>
-                                              {/* リアルタイム補充進捗 */}
-                                              <div className="text-[10px] font-bold text-emerald-400 drop-shadow flex items-center gap-1.5 mt-0.5">
-                                                <span>対応: {item.fulfilledQuantity || 0}</span>
-                                                <span className="opacity-35">|</span>
-                                                <span className="text-orange-300">残り: {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}</span>
+                                            </div>
+
+                                            {/* 2行目: 品名 */}
+                                            <h3 className="text-sm font-black text-white leading-tight break-all mt-2 line-clamp-2" title={item.productName}>
+                                              {item.productName}
+                                            </h3>
+
+                                            {/* 3行目: ー区切り線ー */}
+                                            <div className="border-t border-gray-800/65 my-2"></div>
+
+                                            {/* 4行目: JAN */}
+                                            <div className="flex items-center gap-1 text-[10px] text-gray-500 font-mono">
+                                              <span className="text-gray-600 font-bold">JAN:</span>
+                                              <span className="text-blue-400 font-bold tracking-wider">{item.janCode}</span>
+                                            </div>
+
+                                            {/* 5行目: 受付数｜対応数｜残り数 */}
+                                            <div className="flex items-center gap-2 text-xs font-bold text-gray-300 mt-1.5 flex-wrap">
+                                              <div className="flex items-center gap-1">
+                                                <span className="text-[9px] text-gray-500 font-black uppercase">受付:</span>
+                                                <span className="text-blue-400 font-extrabold">{item.quantity}{item.unit || '個'}</span>
+                                              </div>
+                                              <span className="text-gray-800 select-none">|</span>
+                                              <div className="flex items-center gap-1">
+                                                <span className="text-[9px] text-gray-500 font-black uppercase">対応:</span>
+                                                <span className="text-emerald-400 font-extrabold">{item.fulfilledQuantity || 0}{item.unit || '個'}</span>
+                                              </div>
+                                              <span className="text-gray-800 select-none">|</span>
+                                              <div className="flex items-center gap-1">
+                                                <span className="text-[9px] text-gray-500 font-black uppercase">残り:</span>
+                                                <span className={`font-extrabold ${Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0)) > 0 ? 'text-orange-400' : 'text-emerald-500'}`}>
+                                                  {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}{item.unit || '個'}
+                                                </span>
                                               </div>
                                             </div>
-                                            <div className="px-2.5 py-1 bg-blue-600 text-white rounded-lg shadow-[0_0_12px_rgba(37,99,235,0.3)] font-black text-base shrink-0 flex items-baseline">
-                                              {item.quantity}
-                                              <span className="text-[10px] ml-0.5 opacity-80">{item.unit || '個'}</span>
+
+                                            {/* 6行目: 受付日時 */}
+                                            <div className="flex items-center gap-1 text-[9px] text-gray-500 font-mono mt-1.5">
+                                              <span className="text-gray-600 font-bold">受付日時:</span>
+                                              <span>{formatDate(item.createdAt)}</span>
                                             </div>
                                           </div>
                                         </div>
@@ -717,21 +740,13 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                   <motion.div
                                     key={item.id}
                                     layout="position"
-                                    className={`relative rounded-2xl overflow-hidden shadow-md border transition-all ${
+                                    className={`relative rounded-xl overflow-hidden shadow-sm border transition-all ${
                                       item.status === 'completed' 
                                         ? 'bg-gray-955/60 border-gray-900/50 opacity-40 grayscale' 
-                                        : 'bg-gray-900 border-gray-800/80 hover:border-gray-700/80'
+                                        : 'bg-gray-900 border-gray-800/80 hover:border-gray-700/85'
                                     }`}
                                   >
-                                    {/* Mini blur-image placeholder back of card */}
-                                    {item.imageUrl && (
-                                      <div className="absolute inset-0 z-0">
-                                        <img src={item.imageUrl} alt="" className="w-full h-full object-contain bg-white p-4 opacity-10" />
-                                        <div className="absolute inset-0 bg-gray-950/70"></div>
-                                      </div>
-                                    )}
-
-                                    <div className="relative z-10 p-3 sm:p-3.5 text-left font-sans">
+                                    <div className="relative z-10 p-2.5 sm:p-3 text-left font-sans">
                                       {editingId === item.id ? (
                                         <div className="space-y-3">
                                           <div className="text-[10px] text-gray-500 font-black pl-1">商品情報を編集しています</div>
