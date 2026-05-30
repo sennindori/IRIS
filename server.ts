@@ -156,7 +156,7 @@ async function startServer() {
     const tryYahooShopping = async (): Promise<any | null> => {
       const trimmedAppId = appId?.trim();
       if (!trimmedAppId || trimmedAppId === "YOUR_YAHOO_APP_ID" || trimmedAppId === "") {
-        console.warn("YAHOO_APP_ID is not configured or holds default placeholder. Skipping Yahoo Shopping API.");
+        console.warn("⚠️ [Yahoo API Notice] YAHOO_APP_ID is not configured in environment variables. Scanning fallback will use Gemini context lookups. To enable official Yahoo lookup from all devices, please configure YAHOO_APP_ID in AI Studio Settings.");
         return null;
       }
       try {
@@ -165,11 +165,10 @@ async function startServer() {
           : "Configured";
         console.log(`[Yahoo API Request] Searching item for JAN Code: ${janCode} using YAHOO_APP_ID: [${maskedAppId}]`);
         
-        const url = `https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?jan_code=${janCode}`;
+        const url = `https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch?appid=${trimmedAppId}&jan_code=${janCode}`;
         const yahooRes = await fetch(url, {
           method: "GET",
           headers: {
-            "User-Agent": `Yahoo AppID: ${trimmedAppId}`,
             "Accept": "application/json"
           }
         });
