@@ -101,6 +101,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   // Registration form states
   const [showAddForm, setShowAddForm] = useState(false);
   const [newJan, setNewJan] = useState('');
+  const [newCaseJan, setNewCaseJan] = useState('');
   const [newName, setNewName] = useState('');
   const [newMaker, setNewMaker] = useState('');
   const [newSize, setNewSize] = useState('');
@@ -113,6 +114,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   // Edit states
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editJan, setEditJan] = useState('');
+  const [editCaseJan, setEditCaseJan] = useState('');
   const [editName, setEditName] = useState('');
   const [editMaker, setEditMaker] = useState('');
   const [editSize, setEditSize] = useState('');
@@ -545,6 +547,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       item.productName.toLowerCase().includes(term) ||
       (item.maker && item.maker.toLowerCase().includes(term)) ||
       item.janCode.includes(term) ||
+      (item.caseJanCode && item.caseJanCode.includes(term)) ||
       (item.size && item.size.toLowerCase().includes(term)) ||
       (item.remarks && item.remarks.toLowerCase().includes(term))
     );
@@ -570,22 +573,31 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   // Register master item handler
   async function handleCreateItem(e: React.FormEvent) {
     e.preventDefault();
-    if (!newJan.trim() || !newName.trim()) {
+    const cleanJan = newJan.trim();
+    const cleanCaseJan = newCaseJan.trim();
+
+    if (!cleanJan || !newName.trim()) {
       alert("JANコードと商品名は必須項目です。");
       return;
     }
     
-    // Check if JAN is already registered to avoid duplicates
-    const duplicated = items.find(item => item.janCode === newJan.trim());
+    // Check if standard JAN or case JAN already exists in other items
+    const duplicated = items.find(item => {
+      const matchJan = item.janCode === cleanJan || (item.caseJanCode && item.caseJanCode === cleanJan);
+      const matchCaseJan = cleanCaseJan && (item.janCode === cleanCaseJan || (item.caseJanCode && item.caseJanCode === cleanCaseJan));
+      return matchJan || matchCaseJan;
+    });
+
     if (duplicated) {
-      alert(`このJANコード（${newJan.trim()}）はすでに「${duplicated.productName}」として登録されています。`);
+      alert(`このJANコード（${cleanJan}${cleanCaseJan ? ` または ${cleanCaseJan}` : ''}）はすでに「${duplicated.productName}」として登録されています。`);
       return;
     }
 
     setIsRegistering(true);
     try {
       await addDoc(collection(db, 'product_master'), {
-        janCode: newJan.trim(),
+        janCode: cleanJan,
+        caseJanCode: cleanCaseJan || null,
         productName: newName.trim(),
         maker: newMaker.trim() || null,
         size: newSize.trim() || null,
@@ -596,6 +608,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       });
       // Reset form states
       setNewJan('');
+      setNewCaseJan('');
       setNewName('');
       setNewMaker('');
       setNewSize('');
@@ -615,6 +628,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   function startEdit(item: ProductMasterItem) {
     setEditingId(item.id);
     setEditJan(item.janCode);
+    setEditCaseJan(item.caseJanCode || '');
     setEditName(item.productName);
     setEditMaker(item.maker || '');
     setEditSize(item.size || '');
@@ -631,6 +645,8 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   // Save edit handler
   async function handleSaveEdit(id: string) {
     const janClean = editJan.trim();
+    const caseJanClean = editCaseJan.trim();
+    
     if (!janClean) {
       alert("JANコードは必須項目です。");
       return;
@@ -639,15 +655,24 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       alert("商品名は必須です。");
       return;
     }
-    const duplicate = items.find(item => item.janCode === janClean && item.id !== id);
+
+    const duplicate = items.find(item => {
+      if (item.id === id) return false;
+      const matchJan = item.janCode === janClean || (item.caseJanCode && item.caseJanCode === janClean);
+      const matchCaseJan = caseJanClean && (item.janCode === caseJanClean || (item.caseJanCode && item.caseJanCode === caseJanClean));
+      return matchJan || matchCaseJan;
+    });
+
     if (duplicate) {
-      alert(`このJANコード（${janClean}）はすでに「${duplicate.productName}」として登録されています。`);
+      alert(`このJANコード（${janClean}${caseJanClean ? ` または ${caseJanClean}` : ''}）はすでに「${duplicate.productName}」として登録されています。`);
       return;
     }
+
     setIsSaving(true);
     try {
       await updateDoc(doc(db, 'product_master', id), {
         janCode: janClean,
+        caseJanCode: caseJanClean || null,
         productName: editName.trim(),
         maker: editMaker.trim() || null,
         size: editSize.trim() || null,
@@ -864,7 +889,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
                       <div className="grid grid-cols-2 gap-3.5">
                         <div className="col-span-2 space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">JANコード (必須・数字)</label>
+                          <label className="text-[10px] text-gray-400 font-black uppercase">JANコード/本体JAN (必須・数字)</label>
                           <input
                             type="text"
                             inputMode="numeric"
@@ -872,6 +897,18 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                             onChange={(e) => setEditJan(e.target.value.replace(/[^0-9]/g, ''))}
                             className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-650 font-bold text-xs text-white"
                             placeholder="JANコード"
+                          />
+                        </div>
+
+                        <div className="col-span-2 space-y-1">
+                          <label className="text-[10px] text-gray-400 font-black uppercase">ケースJANコード/外箱JAN (任意・数字)</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={editCaseJan}
+                            onChange={(e) => setEditCaseJan(e.target.value.replace(/[^0-9]/g, ''))}
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-650 font-bold text-xs text-white"
+                            placeholder="ケースJANコード"
                           />
                         </div>
 
@@ -968,6 +1005,16 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                             <Barcode size={12} className="text-blue-400 animate-pulse" />
                             {item.janCode}
                           </span>
+                          {item.caseJanCode && (
+                            <span 
+                              onClick={() => setBarcodeItem({ ...item, janCode: item.caseJanCode! })}
+                              className="text-xs font-black font-mono tracking-tight text-amber-500 bg-gray-800 hover:bg-gray-700 hover:text-white px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm border border-gray-700 cursor-pointer active:scale-95 transition-all"
+                              title="クリックしてケースバーコードを表示"
+                            >
+                              <Barcode size={12} className="text-amber-400" />
+                              CS: {item.caseJanCode}
+                            </span>
+                          )}
                           {item.maker && (
                             <span className="text-[10px] font-black text-blue-400 bg-blue-950/40 border border-blue-900/40 px-1.5 py-0.5 rounded-md flex items-center gap-1 uppercase tracking-wider">
                               <Building size={9} />
@@ -1120,6 +1167,22 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                       )}
                     </button>
                   </div>
+                </div>
+
+                {/* Case JAN input */}
+                <div className="space-y-1.55">
+                  <label className="block text-gray-400 font-black uppercase tracking-wider pl-0.5">ケースJANコード (任意/外箱・ボール等)</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={newCaseJan}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      setNewCaseJan(val);
+                    }}
+                    className="w-full px-4 py-3 bg-gray-800 border border-gray-700 text-white rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 outline-none font-bold text-sm tracking-widest font-mono"
+                    placeholder="例: 14901301236544 (ITF等)"
+                  />
                 </div>
 
                 {/* Product Name */}

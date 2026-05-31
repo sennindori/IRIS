@@ -105,7 +105,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
   // AND FILTER OUT items that do not exist in the product_master (completely synchronize with master database)
   const mergedItems = standardItems
     .map(std => {
-      const master = masterItems.find(m => m.janCode === std.janCode);
+      const master = masterItems.find(m => m.janCode === std.janCode || (m.caseJanCode && m.caseJanCode === std.janCode));
       if (!master) return null;
       return {
         ...std,

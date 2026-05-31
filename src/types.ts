@@ -17,6 +17,7 @@ export interface ReplenishmentItem {
 export interface ProductMasterItem {
   id: string;
   janCode: string;
+  caseJanCode?: string; // ケースJAN
   productName: string;
   maker?: string;
   size?: string;

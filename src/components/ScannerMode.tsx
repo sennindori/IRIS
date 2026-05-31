@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { db } from '../lib/firebase';
-import { collection, addDoc, updateDoc, doc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp, query, where, getDocs, limit, or } from 'firebase/firestore';
 import { ArrowLeft, Loader2, Send, CheckCircle2, Scan, AlertCircle, RefreshCw, Plus, Search, Keyboard, X, Delete, Clipboard, Database, Save, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -11,6 +11,16 @@ interface ScannerModeProps {
 
 export default function ScannerMode({ onBack }: ScannerModeProps) {
   const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const [matchedMaster, setMatchedMaster] = useState<{
+    id: string;
+    janCode: string;
+    caseJanCode?: string;
+    productName: string;
+    maker?: string;
+    size?: string;
+    remarks?: string;
+    unit?: string;
+  } | null>(null);
   const [productInfo, setProductInfo] = useState<{ productName: string; imageUrl?: string; maker?: string } | null>(null);
   const [editableProductName, setEditableProductName] = useState('');
   const [showHelp, setShowHelp] = useState(false);
@@ -76,19 +86,25 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     }
   }
 
-  // 商品マスタ商品 (product_master) から JANコード で検索するヘルパー関数
+  // 商品マスタ商品 (product_master) から JANコード またはケースJANで検索するヘルパー関数
   async function findMasterProduct(janCode: string) {
     try {
       const q = query(
         collection(db, 'product_master'),
-        where('janCode', '==', janCode),
+        or(
+          where('janCode', '==', janCode),
+          where('caseJanCode', '==', janCode)
+        ),
         limit(1)
       );
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
         const docData = snapshot.docs[0].data();
         return {
+          id: snapshot.docs[0].id,
           productName: docData.productName as string,
+          janCode: docData.janCode as string,
+          caseJanCode: docData.caseJanCode || undefined,
           maker: docData.maker || undefined,
           size: docData.size || undefined,
           remarks: docData.remarks || undefined,
@@ -323,6 +339,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   async function fetchProductInfo(janCode: string) {
     setIsSearching(true);
     // Reset any previous master register states
+    setMatchedMaster(null);
     setEditableMaker('');
     setMasterSize('');
     setMasterRemarks('');
@@ -332,6 +349,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
       // 1. まずは本気の商品マスタ (product_master) からマッチング
       const masterProd = await findMasterProduct(janCode);
       if (masterProd) {
+        setMatchedMaster(masterProd);
         setProductInfo({
           productName: masterProd.productName,
           maker: masterProd.maker || undefined
@@ -346,6 +364,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         return;
       }
 
+      setMatchedMaster(null);
       // 2. なければYahoo!ショッピングAPIを使用
       const res = await fetch(`/api/product/${janCode}`);
       if (res.ok) {
@@ -419,14 +438,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     
     try {
       // 1. 自動的に商品マスタ（product_master）を登録または更新
-      const q = query(
-        collection(db, 'product_master'),
-        where('janCode', '==', scannedCode),
-        limit(1)
-      );
-      const snapshot = await getDocs(q);
-      const payload = {
-        janCode: scannedCode,
+      const payload: any = {
         productName: nameToRegister,
         maker: (editableMaker || '').trim() || null,
         size: (masterSize || '').trim() || null,
@@ -434,20 +446,39 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         unit: unit || null
       };
 
-      if (!snapshot.empty) {
-        const docId = snapshot.docs[0].id;
-        await updateDoc(doc(db, 'product_master', docId), payload);
+      let finalJanCode = scannedCode;
+
+      if (matchedMaster) {
+        finalJanCode = matchedMaster.janCode;
+        payload.janCode = matchedMaster.janCode;
+        if (matchedMaster.caseJanCode) {
+          payload.caseJanCode = matchedMaster.caseJanCode;
+        }
+        await updateDoc(doc(db, 'product_master', matchedMaster.id), payload);
       } else {
-        await addDoc(collection(db, 'product_master'), {
-          ...payload,
-          createdAt: serverTimestamp()
-        });
+        const q = query(
+          collection(db, 'product_master'),
+          where('janCode', '==', scannedCode),
+          limit(1)
+        );
+        const snapshot = await getDocs(q);
+        payload.janCode = scannedCode;
+
+        if (!snapshot.empty) {
+          const docId = snapshot.docs[0].id;
+          await updateDoc(doc(db, 'product_master', docId), payload);
+        } else {
+          await addDoc(collection(db, 'product_master'), {
+            ...payload,
+            createdAt: serverTimestamp()
+          });
+        }
       }
 
       // 2. 数量が1以上の場合は単位・売場を併せて補充依頼情報として送信
       if (sendReplenishment) {
         await addDoc(collection(db, 'replenishment_list'), {
-          janCode: scannedCode,
+          janCode: finalJanCode,
           productName: nameToRegister,
           maker: (editableMaker || '').trim() || null,
           imageUrl: productInfo.imageUrl || null,
@@ -480,15 +511,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     setIsRegisteringMaster(true);
     setMasterRegisterSuccess(false);
     try {
-      const q = query(
-        collection(db, 'product_master'),
-        where('janCode', '==', scannedCode),
-        limit(1)
-      );
-      const snapshot = await getDocs(q);
-      
-      const payload = {
-        janCode: scannedCode,
+      const payload: any = {
         productName: (editableProductName || '').trim(),
         maker: (editableMaker || '').trim() || null,
         size: (masterSize || '').trim() || null,
@@ -496,16 +519,30 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         unit: unit || null
       };
 
-      if (!snapshot.empty) {
-        // Update
-        const docId = snapshot.docs[0].id;
-        await updateDoc(doc(db, 'product_master', docId), payload);
+      if (matchedMaster) {
+        payload.janCode = matchedMaster.janCode;
+        if (matchedMaster.caseJanCode) {
+          payload.caseJanCode = matchedMaster.caseJanCode;
+        }
+        await updateDoc(doc(db, 'product_master', matchedMaster.id), payload);
       } else {
-        // Create
-        await addDoc(collection(db, 'product_master'), {
-          ...payload,
-          createdAt: serverTimestamp()
-        });
+        const q = query(
+          collection(db, 'product_master'),
+          where('janCode', '==', scannedCode),
+          limit(1)
+        );
+        const snapshot = await getDocs(q);
+        payload.janCode = scannedCode;
+
+        if (!snapshot.empty) {
+          const docId = snapshot.docs[0].id;
+          await updateDoc(doc(db, 'product_master', docId), payload);
+        } else {
+          await addDoc(collection(db, 'product_master'), {
+            ...payload,
+            createdAt: serverTimestamp()
+          });
+        }
       }
       setMasterRegisterSuccess(true);
       alert("商品マスタを保存しました");

@@ -307,7 +307,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
 
   // Helper to determine the genre of a replenishment item
   const getGenreForItem = (item: ReplenishmentItem) => {
-    const matchedMaster = masterItems.find(m => m.janCode === item.janCode);
+    const matchedMaster = masterItems.find(m => m.janCode === item.janCode || (m.caseJanCode && m.caseJanCode === item.janCode));
     return matchedMaster?.genre || 'その他';
   };
 
