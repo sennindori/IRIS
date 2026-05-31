@@ -17,7 +17,7 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
 
   const appUrl = typeof window !== 'undefined' ? window.location.href : '';
 
-  const modes = [
+  const inputGroup = [
     { 
       id: 'scan' as AppMode, 
       label: 'スキャン', 
@@ -33,10 +33,13 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
       color: 'bg-amber-50 text-amber-500 border border-amber-100/70', 
       hoverBg: 'hover:bg-amber-50/20 hover:border-amber-100',
       desc: '定番商品リストからの簡易補充依頼' 
-    },
+    }
+  ];
+
+  const checkGroup = [
     { 
       id: 'view' as AppMode, 
-      label: '補充確認', 
+      label: '補充チェック', 
       icon: Eye, 
       color: 'bg-blue-50 text-blue-500 border border-blue-100/70', 
       hoverBg: 'hover:bg-blue-50/20 hover:border-blue-100',
@@ -44,12 +47,15 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
     },
     { 
       id: 'bbs' as AppMode, 
-      label: '掲示板', 
+      label: '連絡事項', 
       icon: MessageSquare, 
       color: 'bg-emerald-50 text-emerald-500 border border-emerald-100/70', 
       hoverBg: 'hover:bg-emerald-50/20 hover:border-emerald-100',
       desc: 'スタッフへの連絡事項' 
-    },
+    }
+  ];
+
+  const settingsGroup = [
     { 
       id: 'master' as AppMode, 
       label: '商品マスタ', 
@@ -57,17 +63,52 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
       color: 'bg-indigo-50 text-indigo-500 border border-indigo-100/70', 
       hoverBg: 'hover:bg-indigo-50/20 hover:border-indigo-100',
       desc: '商品マスタ情報の閲覧・登録・管理' 
-    },
+    }
   ];
+
+  const renderModeButton = (mode: typeof inputGroup[0]) => {
+    const hasUnreadBbs = mode.id === 'bbs' && unreadBbsCount > 0;
+    return (
+      <motion.button
+        key={mode.id}
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.99 }}
+        onClick={() => onSelect(mode.id)}
+        className={`w-full flex items-center p-4 sm:p-5 bg-white rounded-[22px] shadow-sm hover:shadow-md border border-gray-100/80 hover:border-gray-200/50 transition-all cursor-pointer ${mode.hoverBg}`}
+        id={`mode-btn-${mode.id}`}
+      >
+        <div className={`${mode.color} p-3 sm:p-3.5 rounded-xl mr-4 shrink-0 relative flex items-center justify-center`}>
+          <mode.icon size={22} className="sm:w-6 sm:h-6" />
+          {hasUnreadBbs && (
+            <span className="absolute -top-1 -right-1 flex h-4 w-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white"></span>
+            </span>
+          )}
+        </div>
+        <div className="text-left flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-black text-gray-900 leading-tight">{mode.label}</h2>
+            {hasUnreadBbs && (
+              <span className="bg-emerald-500 text-white text-[10px] sm:text-xs font-black min-w-[20px] h-5 px-2 rounded-full flex items-center justify-center shrink-0 animate-pulse">
+                {unreadBbsCount}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 font-medium mt-0.5 truncate">{mode.desc}</p>
+        </div>
+      </motion.button>
+    );
+  };
 
   return (
     <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-4 pb-6 bg-gray-50 overflow-hidden">
-      <header className="py-4 sm:py-6 md:py-8 shrink-0 relative flex items-center justify-between max-w-lg mx-auto w-full">
+      <header className="py-2.5 sm:py-4 shrink-0 relative flex items-center justify-between max-w-lg mx-auto w-full">
         {/* Blank placeholder for header balance */}
         <div className="w-10 h-10 invisible" />
         <div className="text-center">
-          <h1 className="text-4xl sm:text-5xl font-black text-blue-600 tracking-tighter">I.R.I.S</h1>
-          <p className="text-[10px] sm:text-[11px] text-gray-400 font-medium uppercase mt-1.5 sm:mt-2 tracking-[0.25em] leading-none font-condensed">
+          <h1 className="text-3xl sm:text-4xl font-black text-blue-600 tracking-tighter">I.R.I.S</h1>
+          <p className="text-[9px] sm:text-[10px] text-gray-400 font-medium uppercase mt-1 tracking-[0.25em] leading-none font-condensed">
             Inventory Replenishment Information System
           </p>
         </div>
@@ -100,41 +141,30 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col gap-2.5 sm:gap-3 max-w-lg mx-auto w-full overflow-y-auto pb-3">
-        {modes.map((mode) => {
-          const hasUnreadBbs = mode.id === 'bbs' && unreadBbsCount > 0;
-          return (
-            <motion.button
-              key={mode.id}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={() => onSelect(mode.id)}
-              className={`flex-1 flex items-center p-4 sm:p-6 bg-white rounded-[24px] sm:rounded-[32px] shadow-lg shadow-gray-200/50 border border-white hover:shadow-xl transition-all active:shadow-none min-h-[76px] sm:min-h-[90px] relative cursor-pointer ${mode.hoverBg}`}
-              id={`mode-btn-${mode.id}`}
-            >
-              <div className={`${mode.color} p-3 sm:p-4 rounded-xl sm:rounded-2xl mr-4 sm:mr-6 shrink-0 relative flex items-center justify-center`}>
-                <mode.icon size={24} className="sm:w-7 sm:h-7" />
-                {hasUnreadBbs && (
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white"></span>
-                  </span>
-                )}
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-black text-gray-900 leading-tight">{mode.label}</h2>
-                  {hasUnreadBbs && (
-                    <span className="bg-emerald-500 text-white text-[10px] sm:text-xs font-black min-w-[20px] h-5 px-2 rounded-full flex items-center justify-center shrink-0">
-                      {unreadBbsCount}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">{mode.desc}</p>
-              </div>
-            </motion.button>
-          );
-        })}
+      <div className="flex-1 flex flex-col gap-6 max-w-lg mx-auto w-full overflow-y-auto pt-4 pb-6 px-1">
+        {/* 入力グループ */}
+        <div className="relative border-2 border-gray-200/60 rounded-[24px] p-4 pt-6 bg-white/10 shadow-sm flex flex-col gap-2.5">
+          <span className="absolute -top-3 left-5 px-3 py-0.5 bg-gray-50 rounded-full text-[10px] font-extrabold tracking-widest text-red-500 border border-gray-200/60 uppercase">
+            入力
+          </span>
+          {inputGroup.map(renderModeButton)}
+        </div>
+
+        {/* 確認グループ */}
+        <div className="relative border-2 border-gray-200/60 rounded-[24px] p-4 pt-6 bg-white/10 shadow-sm flex flex-col gap-2.5">
+          <span className="absolute -top-3 left-5 px-3 py-0.5 bg-gray-50 rounded-full text-[10px] font-extrabold tracking-widest text-blue-500 border border-gray-200/60 uppercase">
+            確認
+          </span>
+          {checkGroup.map(renderModeButton)}
+        </div>
+
+        {/* 設定グループ */}
+        <div className="relative border-2 border-gray-200/60 rounded-[24px] p-4 pt-6 bg-white/10 shadow-sm flex flex-col gap-2.5">
+          <span className="absolute -top-3 left-5 px-3 py-0.5 bg-gray-50 rounded-full text-[10px] font-extrabold tracking-widest text-indigo-500 border border-gray-200/60 uppercase">
+            設定
+          </span>
+          {settingsGroup.map(renderModeButton)}
+        </div>
       </div>
 
       <footer className="mt-auto pt-3 pb-safe border-t border-gray-100 flex items-center justify-between max-w-lg mx-auto w-full shrink-0">

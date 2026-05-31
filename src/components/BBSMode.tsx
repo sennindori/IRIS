@@ -348,9 +348,9 @@ export default function BBSMode({ onBack, username }: BBSModeProps) {
           <ArrowLeft size={18} />
         </button>
         <div className="text-center flex-1">
-          <h1 className="text-lg font-black text-gray-900 tracking-tight">掲示板 (BBS)</h1>
+          <h1 className="text-lg font-black text-gray-900 tracking-tight">連絡事項 (BBS)</h1>
           <p className="text-[10px] text-gray-400 font-bold mt-0.5 uppercase tracking-widest leading-none">
-            Workplace Bulletin Board
+            Workplace Communication
           </p>
         </div>
         <button

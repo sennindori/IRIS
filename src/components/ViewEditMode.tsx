@@ -372,7 +372,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
             <ArrowLeft size={20} />
           </button>
           <div className="text-left">
-            <h1 className="text-base font-black tracking-tight leading-none text-white">補充確認センター</h1>
+            <h1 className="text-base font-black tracking-tight leading-none text-white">補充チェックセンター</h1>
             <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-wider leading-none">
               Control & Verification Board
             </p>
