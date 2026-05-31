@@ -577,7 +577,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     const cleanCaseJan = newCaseJan.trim();
 
     if (!cleanJan || !newName.trim()) {
-      alert("JANコードと商品名は必須項目です。");
+      alert("JAN_プライマリと商品名は必須項目です。");
       return;
     }
     
@@ -589,7 +589,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     });
 
     if (duplicated) {
-      alert(`このJANコード（${cleanJan}${cleanCaseJan ? ` または ${cleanCaseJan}` : ''}）はすでに「${duplicated.productName}」として登録されています。`);
+      alert(`このJAN（${cleanJan}${cleanCaseJan ? ` または ${cleanCaseJan}` : ''}）はすでに「${duplicated.productName}」として登録されています。`);
       return;
     }
 
@@ -648,7 +648,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     const caseJanClean = editCaseJan.trim();
     
     if (!janClean) {
-      alert("JANコードは必須項目です。");
+      alert("JAN_プライマリは必須項目です。");
       return;
     }
     if (!editName.trim()) {
@@ -664,7 +664,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     });
 
     if (duplicate) {
-      alert(`このJANコード（${janClean}${caseJanClean ? ` または ${caseJanClean}` : ''}）はすでに「${duplicate.productName}」として登録されています。`);
+      alert(`このJAN（${janClean}${caseJanClean ? ` または ${caseJanClean}` : ''}）はすでに「${duplicate.productName}」として登録されています。`);
       return;
     }
 
@@ -749,7 +749,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="品番（JAN）、商品名、メーカー、サイズから検索..."
+                placeholder="品番(JAN_プライマリ/セカンダリ)、商品名、メーカー、サイズから検索..."
                 className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 text-xs font-bold placeholder:text-gray-500 text-white outline-none transition-all"
               />
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
@@ -889,26 +889,26 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
                       <div className="grid grid-cols-2 gap-3.5">
                         <div className="col-span-2 space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">JANコード/本体JAN (必須・数字)</label>
+                          <label className="text-[10px] text-gray-400 font-black uppercase">JAN_プライマリ (必須・数字)</label>
                           <input
                             type="text"
                             inputMode="numeric"
                             value={editJan}
                             onChange={(e) => setEditJan(e.target.value.replace(/[^0-9]/g, ''))}
                             className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-650 font-bold text-xs text-white"
-                            placeholder="JANコード"
+                            placeholder="JAN_プライマリ"
                           />
                         </div>
 
                         <div className="col-span-2 space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">ケースJANコード/外箱JAN (任意・数字)</label>
+                          <label className="text-[10px] text-gray-400 font-black uppercase">JAN_セカンダリ (任意・数字)</label>
                           <input
                             type="text"
                             inputMode="numeric"
                             value={editCaseJan}
                             onChange={(e) => setEditCaseJan(e.target.value.replace(/[^0-9]/g, ''))}
                             className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-650 font-bold text-xs text-white"
-                            placeholder="ケースJANコード"
+                            placeholder="JAN_セカンダリ"
                           />
                         </div>
 
@@ -1000,7 +1000,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                           <span 
                             onClick={() => setBarcodeItem(item)}
                             className="text-xs font-black font-mono tracking-tight text-gray-300 bg-gray-800 hover:bg-gray-700 hover:text-white px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm border border-gray-700 cursor-pointer active:scale-95 transition-all"
-                            title="クリックしてバーコードを表示"
+                            title="クリックしてプライマリバーコードを表示"
                           >
                             <Barcode size={12} className="text-blue-400 animate-pulse" />
                             {item.janCode}
@@ -1009,10 +1009,10 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                             <span 
                               onClick={() => setBarcodeItem({ ...item, janCode: item.caseJanCode! })}
                               className="text-xs font-black font-mono tracking-tight text-amber-500 bg-gray-800 hover:bg-gray-700 hover:text-white px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm border border-gray-700 cursor-pointer active:scale-95 transition-all"
-                              title="クリックしてケースバーコードを表示"
+                              title="クリックしてセカンダリバーコードを表示"
                             >
                               <Barcode size={12} className="text-amber-400" />
-                              CS: {item.caseJanCode}
+                              JAN_セカンダリ: {item.caseJanCode}
                             </span>
                           )}
                           {item.maker && (
@@ -1134,7 +1134,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                 
                 {/* JAN input */}
                 <div className="space-y-1.5">
-                  <label className="block text-gray-400 font-black uppercase tracking-wider pl-0.5">JANコード (品番) *必須</label>
+                  <label className="block text-gray-400 font-black uppercase tracking-wider pl-0.5">JAN_プライマリ (品番) *必須</label>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -1171,7 +1171,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
                 {/* Case JAN input */}
                 <div className="space-y-1.55">
-                  <label className="block text-gray-400 font-black uppercase tracking-wider pl-0.5">ケースJANコード (任意/外箱・ボール等)</label>
+                  <label className="block text-gray-400 font-black uppercase tracking-wider pl-0.5">JAN_セカンダリ (任意)</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1181,7 +1181,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                       setNewCaseJan(val);
                     }}
                     className="w-full px-4 py-3 bg-gray-800 border border-gray-700 text-white rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 outline-none font-bold text-sm tracking-widest font-mono"
-                    placeholder="例: 14901301236544 (ITF等)"
+                    placeholder="例: 14901301236544"
                   />
                 </div>
 
@@ -1382,7 +1382,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
               <div className="mb-4 text-left">
                 <span className="text-[10px] bg-blue-905 border border-blue-900/60 text-blue-400 px-3 py-1 rounded-full font-black uppercase tracking-wider">
-                  JANバーコード表示
+                  バーコード表示
                 </span>
                 <h3 className="text-sm font-black text-white leading-tight mt-3">
                   {barcodeItem.productName}
@@ -1472,14 +1472,14 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                     />
                   </div>
                   <p className="text-[10px] text-gray-500 font-bold max-w-xs">
-                    ※ 既存の同一番号(JAN)は自動的に更新され、新しい番号は新規登録されます。ウィンドウを閉じずにお待ちください。
+                    ※ 既存の同一JAN_プライマリは自動的に更新され、新しい番号は新規登録されます。ウィンドウを閉じずにお待ちください。
                   </p>
                 </div>
               ) : (
                 /* preview list & actions */
                 <>
                   <div className="text-[10px] text-gray-300 bg-teal-950/20 border border-teal-900/40 p-3 rounded-2xl mb-4 leading-relaxed shrink-0">
-                    💡 <strong>処理確認:</strong> データベース上に同一のJANコードが既に登録されている場合は<strong>「最新情報に更新（上書き）」</strong>され、存在しないJANコードは<strong>「新規に登録」</strong>されます。
+                    💡 <strong>処理確認:</strong> データベース上に同一のJAN_プライマリが既に登録されている場合は<strong>「最新情報に更新（上書き）」</strong>され、存在しないJANは<strong>「新規に登録」</strong>されます。
                   </div>
 
                   {/* table preview */}
@@ -1487,7 +1487,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                     <table className="w-full text-[10px] text-left border-collapse">
                       <thead className="bg-gray-900 sticky top-0 text-gray-400 font-bold border-b border-gray-850 border-solid">
                         <tr>
-                          <th className="p-2.5 font-bold">JANコード</th>
+                          <th className="p-2.5 font-bold">JAN_プライマリ</th>
                           <th className="p-2.5 font-bold">商品名</th>
                           <th className="p-2.5 font-bold">メーカー</th>
                           <th className="p-2.5 font-bold">サイズ</th>
