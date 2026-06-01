@@ -326,6 +326,11 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
   };
 
   const sortAlphabetically = (a: ReplenishmentItem, b: ReplenishmentItem) => {
+    const nameCompare = a.productName.localeCompare(b.productName, 'ja-JP');
+    if (nameCompare !== 0) {
+      return nameCompare;
+    }
+
     const priority = (sub?: string) => {
       if (sub === '客注') return 0;
       if (sub === '催事') return 1;
@@ -337,11 +342,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
     const priA = priority(a.subcategory);
     const priB = priority(b.subcategory);
 
-    if (priA !== priB) {
-      return priA - priB;
-    }
-
-    return a.productName.localeCompare(b.productName, 'ja-JP');
+    return priA - priB;
   };
 
   // Filter datasets based on status and search queries
@@ -581,18 +582,8 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                       >
                                         <div className="flex flex-col h-full justify-between">
                                           <div>
-                                            {/* 1行目: メーカー｜サブカテゴリ */}
+                                            {/* 1行目: サブカテゴリバッジのみ */}
                                             <div className="flex items-center gap-1.5 flex-wrap">
-                                              {item.maker ? (
-                                                <span className="px-1.5 py-0.5 bg-gray-800 text-gray-400 text-[10px] font-black rounded-md truncate max-w-[120px]">
-                                                  {item.maker}
-                                                </span>
-                                              ) : (
-                                                <span className="px-1.5 py-0.5 bg-gray-950/40 text-gray-600 text-[10px] font-bold rounded-md">
-                                                  メーカーなし
-                                                </span>
-                                              )}
-                                              <span className="text-gray-750 text-[10px] select-none font-bold">|</span>
                                               <span className={`px-1.5 py-0.5 text-[10px] font-black rounded-md border uppercase tracking-wider truncate ${
                                                 item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
                                                 item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
@@ -604,10 +595,17 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                               </span>
                                             </div>
 
-                                            {/* 2行目: 品名 */}
-                                            <h3 className="text-sm font-black text-white leading-tight break-all mt-2 line-clamp-2" title={item.productName}>
-                                              {item.productName}
-                                            </h3>
+                                            {/* 2行目: メーカー名＋品名 */}
+                                            <div className="mt-2">
+                                              {item.maker && (
+                                                <div className="text-[11px] font-medium text-gray-400 mb-0.5 truncate" title={item.maker}>
+                                                  {item.maker}
+                                                </div>
+                                              )}
+                                              <h3 className="text-sm font-black text-white leading-tight break-all line-clamp-2" title={item.productName}>
+                                                {item.productName}
+                                              </h3>
+                                            </div>
 
                                             {/* 3行目: ー区切り線ー */}
                                             <div className="border-t border-gray-800/65 my-2"></div>
@@ -848,61 +846,87 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                           </div>
                                         </div>
                                       ) : (
-                                        <div className="flex items-center justify-between gap-4">
-                                          <div className="flex-1 min-w-0 font-sans">
-                                            <div className="flex flex-wrap items-center gap-2 mb-1">
-                                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
-                                                item.status === 'completed' ? 'bg-gray-800 text-gray-500 border border-gray-700/30' : 'bg-blue-600 text-white'
-                                              }`}>
-                                                {item.status === 'completed' ? '完了' : '未対応'}
-                                              </span>
-                                              <span className="text-[10px] text-gray-500 font-mono tracking-tight font-bold">{item.janCode}</span>
-                                              <span className="text-[10px] text-gray-500 ml-auto font-mono">{formatDate(item.createdAt)}</span>
-                                            </div>
+                                        <div className="w-full font-sans">
+                                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                                            <span className={`px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full ${
+                                              item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+                                              item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                                              item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
+                                              item.subcategory === 'その他' ? 'bg-zinc-800/85 text-zinc-400 border-zinc-700' :
+                                              'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                            }`}>
+                                              {item.subcategory || '通常'}
+                                            </span>
+                                            <span className="text-[10px] text-gray-500 font-mono tracking-tight font-bold">{item.janCode}</span>
                                             
-                                            <h3 className={`text-xs sm:text-sm font-black leading-tight mb-2 truncate ${item.status === 'completed' ? 'line-through text-gray-600' : 'text-gray-100'}`}>
-                                              {item.productName}
-                                            </h3>
-                                            
-                                            <div className="flex flex-wrap items-center justify-between gap-3 mt-1.5 pt-2 border-t border-gray-850/30">
-                                              <div className="flex-1 min-w-0">
-                                                {item.maker && (
-                                                  <span className="inline-block px-1.5 py-0.5 bg-gray-800/80 text-gray-400 text-[9px] font-medium rounded-md truncate max-w-full mb-1 mr-1">
-                                                    {item.maker}
-                                                  </span>
-                                                )}
-                                                <span className={`inline-block px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider truncate max-w-full mb-1 ${
-                                                  item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
-                                                  item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                                                  item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
-                                                  item.subcategory === 'その他' ? 'bg-zinc-800/85 text-zinc-400 border-zinc-700' :
-                                                  'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                                                }`}>
-                                                  {item.subcategory || '通常'}
-                                                </span>
-                                                
-                                                {/* リアルタイム補充状況 (対応数/依頼数、残数) */}
-                                                <div className="text-xs font-bold text-gray-400 flex flex-col gap-0.5 justify-center">
-                                                  <div className="flex items-center gap-1 leading-none">
-                                                    <span>補充:</span>
-                                                    <strong className="text-emerald-400 font-extrabold">{item.fulfilledQuantity || 0}</strong>
-                                                    <span className="text-gray-500">/</span>
-                                                    <span>{item.quantity}{item.unit || '個'}</span>
-                                                  </div>
-                                                  
-                                                  {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0)) > 0 ? (
-                                                    <div className="text-[10px] font-black tracking-wider text-orange-400 leading-none mt-1">
-                                                      あと {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}{item.unit || '個'} 不足
-                                                    </div>
-                                                  ) : (
-                                                    <div className="text-[10px] font-black tracking-wider text-emerald-400 flex items-center gap-1 leading-none mt-1">
-                                                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                                                      補充完了
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </div>
+                                            <div className="flex items-center gap-1 ml-auto shrink-0 select-none">
+                                              <span className="text-[10px] text-gray-500 font-mono mr-1">{formatDate(item.createdAt)}</span>
+                                              
+                                              {/* Inline Edit form launcher */}
+                                              <button
+                                                onClick={() => startEdit(item)}
+                                                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                                                title="編集"
+                                              >
+                                                <Edit2 size={12} />
+                                              </button>
 
+                                              {/* Safety Guard styled delete */}
+                                              <button
+                                                onClick={() => {
+                                                  if (deletingId === item.id) {
+                                                    deleteItem(item.id);
+                                                  } else {
+                                                    setDeletingId(item.id);
+                                                    setTimeout(() => setDeletingId(null), 3000);
+                                                  }
+                                                }}
+                                                className={`p-1.5 transition-all rounded-lg ${
+                                                  deletingId === item.id 
+                                                    ? 'bg-red-600 text-white scale-110' 
+                                                    : 'text-gray-400 hover:text-red-400'
+                                                }`}
+                                                title="削除"
+                                              >
+                                                {deletingId === item.id ? <Trash2 size={12} className="animate-pulse" /> : <Trash2 size={12} />}
+                                              </button>
+                                            </div>
+                                          </div>
+                                          
+                                          {item.maker && (
+                                            <div className="text-[10px] font-medium text-gray-400 mb-0.5 truncate" title={item.maker}>
+                                              {item.maker}
+                                            </div>
+                                          )}
+                                          <h3 className={`text-xs sm:text-sm font-black leading-tight mb-2 truncate ${item.status === 'completed' ? 'line-through text-gray-600' : 'text-gray-100'}`}>
+                                            {item.productName}
+                                          </h3>
+                                          
+                                          {/* 罫線 */}
+                                          <div className="border-t border-gray-850/30 mt-2.5 pt-2 flex flex-col gap-2.5">
+                                            {/* 補充、依頼数、残り数の行 */}
+                                            <div className="text-xs font-bold text-gray-400 flex flex-wrap items-center justify-between gap-2">
+                                              <div className="flex items-center gap-1.5 leading-none">
+                                                <span>補充:</span>
+                                                <strong className="text-emerald-400 font-extrabold">{item.fulfilledQuantity || 0}</strong>
+                                                <span className="text-gray-500">/</span>
+                                                <span>{item.quantity}{item.unit || '個'}</span>
+                                              </div>
+                                              
+                                              {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0)) > 0 ? (
+                                                <div className="text-[10px] font-black tracking-wider text-orange-400 leading-none">
+                                                  あと {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}{item.unit || '個'} 不足
+                                                </div>
+                                              ) : (
+                                                <div className="text-[10px] font-black tracking-wider text-emerald-400 flex items-center gap-1 leading-none">
+                                                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                                  補充完了
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* 最後の行に実績の操作と完了にするボタン */}
+                                            <div className="flex items-center justify-between gap-2 mt-0.5">
                                               {/* 対応数の増減コントローラー */}
                                               <div className="flex items-center bg-gray-950 border border-gray-850 rounded-xl p-1 shrink-0 shadow-inner select-none font-sans">
                                                 <button
@@ -931,59 +955,27 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                                   className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors text-sm font-black ${
                                                     item.status === 'completed'
                                                       ? 'text-gray-750 cursor-not-allowed'
-                                                      : 'bg-gray-855 hover:bg-gray-805 active:bg-gray-750 text-gray-300 hover:text-white'
+                                                      : 'bg-gray-855 hover:bg-gray-850 active:bg-gray-750 text-gray-300 hover:text-white'
                                                   }`}
                                                   title="+1"
                                                 >
                                                   ＋
                                                 </button>
                                               </div>
-                                            </div>
-                                          </div>
 
-                                          {/* Controls actions col */}
-                                          <div className="flex items-center gap-1.5 shrink-0 select-none">
-                                            {/* Toggle completed button */}
-                                            <button
-                                              onClick={() => toggleStatus(item)}
-                                              className={`p-2.5 sm:p-3 rounded-xl transition-all shadow-md ${
-                                                item.status === 'completed' 
-                                                  ? 'bg-gray-800 text-gray-600 border border-gray-700/20' 
-                                                  : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/10 hover:scale-105 active:scale-95'
-                                              }`}
-                                              title={item.status === 'completed' ? '未完了に戻す' : '完了にする'}
-                                            >
-                                              <Check size={16} strokeWidth={3} />
-                                            </button>
-
-                                            <div className="flex flex-col gap-1">
-                                              {/* Inline Edit form launcher */}
+                                              {/* Toggle completed button */}
                                               <button
-                                                onClick={() => startEdit(item)}
-                                                className="p-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-xl transition-colors"
-                                                title="編集"
-                                              >
-                                                <Edit2 size={13} />
-                                              </button>
-
-                                              {/* Safety Guard styled delete */}
-                                              <button
-                                                onClick={() => {
-                                                  if (deletingId === item.id) {
-                                                    deleteItem(item.id);
-                                                  } else {
-                                                    setDeletingId(item.id);
-                                                    setTimeout(() => setDeletingId(null), 3000);
-                                                  }
-                                                }}
-                                                className={`p-2 transition-all rounded-xl ${
-                                                  deletingId === item.id 
-                                                    ? 'bg-red-600 text-white scale-110' 
-                                                    : 'text-gray-500 hover:text-red-400'
+                                                onClick={() => toggleStatus(item)}
+                                                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl transition-all shadow-md flex items-center gap-1.5 shrink-0 ${
+                                                  item.status === 'completed' 
+                                                    ? 'bg-amber-600/20 hover:bg-amber-600/35 text-amber-300 border border-amber-500/30 hover:scale-105 active:scale-95' 
+                                                    : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/10 hover:scale-105 active:scale-95'
                                                 }`}
-                                                title="削除"
                                               >
-                                                {deletingId === item.id ? <Trash2 size={13} className="animate-pulse" /> : <Trash2 size={13} />}
+                                                <Check size={14} strokeWidth={3} />
+                                                <span className="text-[11px] font-black tracking-wider">
+                                                  {item.status === 'completed' ? '未対応にする' : '完了にする'}
+                                                </span>
                                               </button>
                                             </div>
                                           </div>

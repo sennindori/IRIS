@@ -194,9 +194,10 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
     try {
       const csvContent = "\uFEFF" + [ // Add BOM for Excel compatibility in Japanese encoding
-        ['JANコード', '商品名', 'メーカー', 'サイズ', '単位', '備考', 'ジャンル'].join(','),
+        ['JAN_プライマリ', 'JAN_セカンダリ', '商品名', 'メーカー', 'サイズ', '単位', '備考', 'ジャンル'].join(','),
         ...items.map(item => [
           `"${(item.janCode || '').replace(/"/g, '""')}"`,
+          `"${(item.caseJanCode || '').replace(/"/g, '""')}"`,
           `"${(item.productName || '').replace(/"/g, '""')}"`,
           `"${(item.maker || '').replace(/"/g, '""')}"`,
           `"${(item.size || '').replace(/"/g, '""')}"`,
@@ -255,7 +256,8 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     const headerRow = parseCSVLine(lines[0]);
     
     // Find matching columns
-    let janIdx = -1;
+    let janPrimaryIdx = -1;
+    let janSecondaryIdx = -1;
     let nameIdx = -1;
     let makerIdx = -1;
     let sizeIdx = -1;
@@ -265,8 +267,10 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
     headerRow.forEach((h, index) => {
       const headerStr = h.trim().toLowerCase();
-      if (['janコード', 'janコード(品番)', 'jancode', 'jan', 'jan_code', '品番', 'コード', 'barcode'].includes(headerStr)) {
-        janIdx = index;
+      if (['jan_プライマリ', 'jan_primary', 'janプライマリ', 'primary_jan', 'primary jan', 'janコード', 'janコード(品番)', 'jancode', 'jan', 'jan_code', '品番', 'コード', 'barcode'].includes(headerStr)) {
+        janPrimaryIdx = index;
+      } else if (['jan_セカンダリ', 'jan_secondary', 'janセカンダリ', 'secondary_jan', 'secondary jan', 'ケースjan', 'case_jan', 'casejan', 'ケースjanコード'].includes(headerStr)) {
+        janSecondaryIdx = index;
       } else if (['商品名', '商品名(必須)', 'productname', 'name', '品名', '商品', 'title'].includes(headerStr)) {
         nameIdx = index;
       } else if (['メーカー', 'メーカー(ブランド)', 'maker', 'brand', 'メーカー名', 'ブランド', 'manufacturer'].includes(headerStr)) {
@@ -283,16 +287,44 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     });
 
     // Fallbacks based on typical column order if headers are missing or custom
-    if (janIdx === -1) janIdx = 0;
-    if (nameIdx === -1) nameIdx = headerRow.length > 1 ? 1 : -1;
-    if (makerIdx === -1 && headerRow.length > 2) makerIdx = 2;
-    if (sizeIdx === -1 && headerRow.length > 3) sizeIdx = 3;
-    if (unitIdx === -1 && headerRow.length > 4) unitIdx = 4;
-    if (remarksIdx === -1 && headerRow.length > 5) remarksIdx = 5;
-    if (genreIdx === -1 && headerRow.length > 6) genreIdx = 6;
+    if (janPrimaryIdx === -1) janPrimaryIdx = 0;
+    if (janSecondaryIdx === -1 && headerRow.length > 1 && nameIdx !== 1) {
+      // If we exported from the app, it is index 1. Let's inspect:
+      // If index 1 is not name, it is highly likely to be janSecondaryIdx
+      janSecondaryIdx = 1;
+    }
 
-    if (janIdx === -1 || nameIdx === -1) {
-      alert("JANコード及び商品名に該当する列が見つかりません。ヘッダー（1行目）に「JANコード」と「商品名」を記載してください。");
+    if (nameIdx === -1) {
+      if (janSecondaryIdx === 1) {
+        nameIdx = headerRow.length > 2 ? 2 : -1;
+      } else {
+        nameIdx = headerRow.length > 1 ? 1 : -1;
+      }
+    }
+
+    if (makerIdx === -1) {
+      const nextIdx = nameIdx + 1;
+      if (headerRow.length > nextIdx) makerIdx = nextIdx;
+    }
+    if (sizeIdx === -1) {
+      const nextIdx = nameIdx + 2;
+      if (headerRow.length > nextIdx) sizeIdx = nextIdx;
+    }
+    if (unitIdx === -1) {
+      const nextIdx = nameIdx + 3;
+      if (headerRow.length > nextIdx) unitIdx = nextIdx;
+    }
+    if (remarksIdx === -1) {
+      const nextIdx = nameIdx + 4;
+      if (headerRow.length > nextIdx) remarksIdx = nextIdx;
+    }
+    if (genreIdx === -1) {
+      const nextIdx = nameIdx + 5;
+      if (headerRow.length > nextIdx) genreIdx = nextIdx;
+    }
+
+    if (janPrimaryIdx === -1 || nameIdx === -1) {
+      alert("JAN_プライマリ及び商品名に該当する列が見つかりません。ヘッダー（1行目）に「JAN_プライマリ」と「商品名」を記載してください。");
       return;
     }
 
@@ -302,15 +334,19 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       if (!line) continue;
 
       const cols = parseCSVLine(line);
-      // Clean up JAN
-      const rawJan = cols[janIdx] ? cols[janIdx].trim() : '';
-      const cleanJan = rawJan.replace(/[^0-9]/g, '');
+      const rawPrimary = cols[janPrimaryIdx] ? cols[janPrimaryIdx].trim() : '';
+      const cleanPrimary = rawPrimary.replace(/[^0-9]/g, '');
+
+      const rawSecondary = janSecondaryIdx !== -1 && cols[janSecondaryIdx] ? cols[janSecondaryIdx].trim() : '';
+      const cleanSecondary = rawSecondary.replace(/[^0-9]/g, '');
+
       const productName = cols[nameIdx] ? cols[nameIdx].trim() : '';
 
-      if (!cleanJan || !productName) continue; // Skip incomplete or header lines
+      if (!cleanPrimary || !productName) continue; // Skip incomplete or header lines
 
       parsedItems.push({
-        janCode: cleanJan,
+        janCode: cleanPrimary,
+        caseJanCode: cleanSecondary || '',
         productName: productName,
         maker: makerIdx !== -1 && cols[makerIdx] ? cols[makerIdx].trim() : '',
         size: sizeIdx !== -1 && cols[sizeIdx] ? cols[sizeIdx].trim() : '',
@@ -321,7 +357,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     }
 
     if (parsedItems.length === 0) {
-      alert("有効なデータ行（JANコードと商品名が入っている行）が見つかりませんでした。");
+      alert("有効なデータ行（JAN_プライマリと商品名が入っている行）が見つかりませんでした。");
       return;
     }
 
@@ -338,16 +374,28 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     setImportProgress({ current: 0, total });
 
     // Build map of existing items for super fast client-side checks
-    const existingMap = new Map<string, string>();
+    const janToDocIdMap = new Map<string, string>();
     items.forEach(item => {
-      existingMap.set(item.janCode, item.id);
+      if (item.janCode) {
+        janToDocIdMap.set(item.janCode, item.id);
+      }
+      if (item.caseJanCode) {
+        janToDocIdMap.set(item.caseJanCode, item.id);
+      }
     });
 
     try {
       for (let i = 0; i < total; i++) {
         const itemData = csvPreviewItems[i];
+        
+        let existingId = janToDocIdMap.get(itemData.janCode);
+        if (!existingId && itemData.caseJanCode) {
+          existingId = janToDocIdMap.get(itemData.caseJanCode);
+        }
+
         const payload = {
           janCode: itemData.janCode,
+          caseJanCode: itemData.caseJanCode || null,
           productName: itemData.productName,
           maker: itemData.maker || null,
           size: itemData.size || null,
@@ -356,7 +404,6 @@ export default function MasterMode({ onBack }: MasterModeProps) {
           genre: itemData.genre || null,
         };
 
-        const existingId = existingMap.get(itemData.janCode);
         if (existingId) {
           await updateDoc(doc(db, 'product_master', existingId), payload);
           updated++;
@@ -1488,21 +1535,21 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                       <thead className="bg-gray-900 sticky top-0 text-gray-400 font-bold border-b border-gray-850 border-solid">
                         <tr>
                           <th className="p-2.5 font-bold">JAN_プライマリ</th>
+                          <th className="p-2.5 font-bold">JAN_セカンダリ</th>
                           <th className="p-2.5 font-bold">商品名</th>
                           <th className="p-2.5 font-bold">メーカー</th>
                           <th className="p-2.5 font-bold">サイズ</th>
-                          <th className="p-2.5 font-bold">単位</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-850/50 font-medium font-sans">
                         {csvPreviewItems.slice(0, 50).map((pItem, idx) => (
-                          <tr key={idx} className="hover:bg-gray-900/50">
-                            <td className="p-2.5 font-mono text-gray-300">{pItem.janCode}</td>
-                            <td className="p-2.5 text-white font-black truncate max-w-[120px]" title={pItem.productName}>{pItem.productName}</td>
-                            <td className="p-2.5 text-gray-400 truncate max-w-[80px]" title={pItem.maker}>{pItem.maker || '-'}</td>
-                            <td className="p-2.5 text-gray-400">{pItem.size || '-'}</td>
-                            <td className="p-2.5 text-gray-400">{pItem.unit || '個'}</td>
-                          </tr>
+                           <tr key={idx} className="hover:bg-gray-900/50">
+                             <td className="p-2.5 font-mono text-gray-300">{pItem.janCode}</td>
+                             <td className="p-2.5 font-mono text-amber-500">{pItem.caseJanCode || '-'}</td>
+                             <td className="p-2.5 text-white font-black truncate max-w-[120px]" title={pItem.productName}>{pItem.productName}</td>
+                             <td className="p-2.5 text-gray-400 truncate max-w-[80px]" title={pItem.maker}>{pItem.maker || '-'}</td>
+                             <td className="p-2.5 text-gray-400">{pItem.size || '-'}</td>
+                           </tr>
                         ))}
                       </tbody>
                     </table>
