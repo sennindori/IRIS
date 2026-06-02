@@ -361,7 +361,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
                 const genreItems = filteredItems.filter(item => (item.genre || 'その他') === genre);
                 if (genreItems.length === 0) return null;
 
-                const isCollapsed = collapsedGenres[genre] ?? false;
+                const isCollapsed = collapsedGenres[genre] ?? true;
 
                 return (
                   <div key={genre} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden text-left">
