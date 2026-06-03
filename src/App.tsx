@@ -34,9 +34,17 @@ export default function App() {
     setLoading(false);
   }, []);
 
+  const savedUsername = localStorage.getItem('app_username') || '';
+  const displayUsername = username || savedUsername;
+
+  // Sync state if username state is empty but we have a saved username in localStorage
+  if (!username && savedUsername) {
+    setUsername(savedUsername);
+  }
+
   // Real-time tracking of unread BBS posts for badge
   useEffect(() => {
-    if (!username) {
+    if (!displayUsername) {
       setUnreadBbsCount(0);
       return;
     }
@@ -47,8 +55,8 @@ export default function App() {
       snapshot.forEach((doc) => {
         const data = doc.data();
         const readBy = data.readBy || [];
-        const isAuthor = data.author === username;
-        const isRead = readBy.includes(username);
+        const isAuthor = data.author === displayUsername;
+        const isRead = readBy.includes(displayUsername);
         
         if (!isAuthor && !isRead) {
           count++;
@@ -60,11 +68,17 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [username]);
+  }, [displayUsername]);
 
   const handlePasscodeSuccess = () => {
     localStorage.setItem('app_passcode_verified', 'true');
     setIsAuthorized(true);
+    
+    // Explicitly load and set username right after successful passcode validation
+    const savedName = localStorage.getItem('app_username') || '';
+    if (savedName) {
+      setUsername(savedName);
+    }
   };
 
   const handleLock = () => {
@@ -85,7 +99,7 @@ export default function App() {
     return <PasscodeLock onSuccess={handlePasscodeSuccess} />;
   }
 
-  if (!username) {
+  if (!username && !savedUsername) {
     return (
       <UsernameSetup
         onSuccess={(name) => {
@@ -109,7 +123,7 @@ export default function App() {
             <ModeSelector
               onSelect={setMode}
               onLock={handleLock}
-              username={username}
+              username={displayUsername}
               unreadBbsCount={unreadBbsCount}
               onChangeUsername={(name) => {
                 localStorage.setItem('app_username', name);
@@ -177,7 +191,7 @@ export default function App() {
             exit={{ opacity: 0, y: 20 }}
             className="fixed inset-0 z-50 bg-gray-50"
           >
-            <BBSMode onBack={() => setMode('menu')} username={username} />
+            <BBSMode onBack={() => setMode('menu')} username={displayUsername} />
           </motion.div>
         )}
 
