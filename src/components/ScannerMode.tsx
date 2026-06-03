@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, query, where, getDocs, limit, or } from 'firebase/firestore';
 import { ArrowLeft, Loader2, Send, CheckCircle2, Scan, AlertCircle, RefreshCw, Plus, Search, Keyboard, X, Delete, Clipboard, Database, Save, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { generateRecordNumber } from '../lib/id';
 
 interface ScannerModeProps {
   onBack: () => void;
@@ -470,6 +471,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         } else {
           await addDoc(collection(db, 'product_master'), {
             ...payload,
+            recordNumber: generateRecordNumber(),
             createdAt: serverTimestamp()
           });
         }
@@ -540,6 +542,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         } else {
           await addDoc(collection(db, 'product_master'), {
             ...payload,
+            recordNumber: generateRecordNumber(),
             createdAt: serverTimestamp()
           });
         }

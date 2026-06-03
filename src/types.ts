@@ -24,6 +24,7 @@ export interface ProductMasterItem {
   remarks?: string;
   unit?: string;
   genre?: string;
+  recordNumber?: string; // 内部データとして固有の「RECORD_#」
   createdAt: any;
 }
 

@@ -43,6 +43,7 @@ service cloud.firestore {
         && (data.get('maker', null) == null || data.get('maker', '') is string)
         && (data.get('size', null) == null || data.get('size', '') is string)
         && (data.get('remarks', null) == null || data.get('remarks', '') is string)
+        && (data.get('recordNumber', null) == null || data.get('recordNumber', '') is string)
         && (data.get('createdAt', request.time) is timestamp);
     }
 

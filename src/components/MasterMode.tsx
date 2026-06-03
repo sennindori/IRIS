@@ -36,6 +36,7 @@ import {
   onSnapshot 
 } from 'firebase/firestore';
 import { ProductMasterItem } from '../types';
+import { generateRecordNumber } from '../lib/id';
 
 interface MasterModeProps {
   onBack: () => void;
@@ -194,8 +195,9 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
     try {
       const csvContent = "\uFEFF" + [ // Add BOM for Excel compatibility in Japanese encoding
-        ['JAN_プライマリ', 'JAN_セカンダリ', '商品名', 'メーカー', 'サイズ', '単位', '備考', 'ジャンル'].join(','),
+        ['RECORD_#', 'JAN_プライマリ', 'JAN_セカンダリ', '商品名', 'メーカー', 'サイズ', '単位', '備考', 'ジャンル'].join(','),
         ...items.map(item => [
+          `"${(item.recordNumber || '').replace(/"/g, '""')}"`,
           `"${(item.janCode || '').replace(/"/g, '""')}"`,
           `"${(item.caseJanCode || '').replace(/"/g, '""')}"`,
           `"${(item.productName || '').replace(/"/g, '""')}"`,
@@ -256,6 +258,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     const headerRow = parseCSVLine(lines[0]);
     
     // Find matching columns
+    let recordNumberIdx = -1;
     let janPrimaryIdx = -1;
     let janSecondaryIdx = -1;
     let nameIdx = -1;
@@ -267,7 +270,9 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
     headerRow.forEach((h, index) => {
       const headerStr = h.trim().toLowerCase();
-      if (['jan_プライマリ', 'jan_primary', 'janプライマリ', 'primary_jan', 'primary jan', 'janコード', 'janコード(品番)', 'jancode', 'jan', 'jan_code', '品番', 'コード', 'barcode'].includes(headerStr)) {
+      if (['record_#', 'record_number', 'recordnumber', 'record#', 'レコード番号', 'レコード#', 'record_no', 'record_id'].includes(headerStr)) {
+        recordNumberIdx = index;
+      } else if (['jan_プライマリ', 'jan_primary', 'janプライマリ', 'primary_jan', 'primary jan', 'janコード', 'janコード(品番)', 'jancode', 'jan', 'jan_code', '品番', 'コード', 'barcode'].includes(headerStr)) {
         janPrimaryIdx = index;
       } else if (['jan_セカンダリ', 'jan_secondary', 'janセカンダリ', 'secondary_jan', 'secondary jan', 'ケースjan', 'case_jan', 'casejan', 'ケースjanコード'].includes(headerStr)) {
         janSecondaryIdx = index;
@@ -348,11 +353,12 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         janCode: cleanPrimary,
         caseJanCode: cleanSecondary || '',
         productName: productName,
-        maker: makerIdx !== -1 && cols[makerIdx] ? cols[makerIdx].trim() : '',
-        size: sizeIdx !== -1 && cols[sizeIdx] ? cols[sizeIdx].trim() : '',
-        unit: unitIdx !== -1 && cols[unitIdx] ? cols[unitIdx].trim() : '個',
-        remarks: remarksIdx !== -1 && cols[remarksIdx] ? cols[remarksIdx].trim() : '',
-        genre: genreIdx !== -1 && cols[genreIdx] ? cols[genreIdx].trim() : ''
+        maker: makerIdx !== -1 && cols[makerIdx] ? cols[cols[makerIdx] ? makerIdx : -1]?.trim() || '' : '',
+        size: sizeIdx !== -1 && cols[sizeIdx] ? cols[cols[sizeIdx] ? sizeIdx : -1]?.trim() || '' : '',
+        unit: unitIdx !== -1 && cols[unitIdx] ? cols[cols[unitIdx] ? unitIdx : -1]?.trim() || '個' : '個',
+        remarks: remarksIdx !== -1 && cols[remarksIdx] ? cols[cols[remarksIdx] ? remarksIdx : -1]?.trim() || '' : '',
+        genre: genreIdx !== -1 && cols[genreIdx] ? cols[cols[genreIdx] ? genreIdx : -1]?.trim() || '' : '',
+        recordNumber: recordNumberIdx !== -1 && cols[recordNumberIdx] ? cols[recordNumberIdx].trim() : ''
       });
     }
 
@@ -410,6 +416,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         } else {
           await addDoc(collection(db, 'product_master'), {
             ...payload,
+            recordNumber: itemData.recordNumber || generateRecordNumber(),
             createdAt: serverTimestamp()
           });
           added++;
@@ -505,6 +512,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
           maker: parsed.maker ? parsed.maker.trim() : null,
           size: parsed.size ? parsed.size.trim() : null,
           remarks: null,
+          recordNumber: generateRecordNumber(),
           createdAt: serverTimestamp()
         });
 
@@ -651,6 +659,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         remarks: newRemarks.trim() || null,
         unit: newUnit || null,
         genre: newGenre.trim() || null,
+        recordNumber: generateRecordNumber(),
         createdAt: serverTimestamp()
       });
       // Reset form states
