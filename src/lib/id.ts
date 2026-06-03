@@ -1,5 +1,5 @@
 export function generateRecordNumber(existingRecordNumbers?: string[]): string {
-  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   let result = '';
   const existingSet = new Set(existingRecordNumbers || []);
   

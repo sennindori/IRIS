@@ -583,36 +583,38 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   return (
     <div className="relative h-[100dvh] max-h-[100dvh] bg-black overflow-hidden font-sans">
       {/* Floating Back Button & UI Overlay */}
-      <div className="absolute top-0 left-0 right-0 p-4 pt-6 flex items-center justify-between z-30 pointer-events-none">
-        <button 
-          onClick={onBack} 
-          className="p-3 bg-black/30 backdrop-blur-md text-white rounded-full pointer-events-auto active:scale-90 transition-transform" 
-          id="floating-back-btn"
-        >
-          <ArrowLeft size={24} />
-        </button>
-
-        {/* Floating Help Trigger when scanning */}
-        {!scannedCode && isPermissionGranted && !errorHeader && (
+      {!scannedCode && (
+        <div className="absolute top-0 left-0 right-0 p-4 pt-6 flex items-center justify-between z-30 pointer-events-none">
           <button 
-            onClick={() => setShowHelp(true)} 
-            className="p-3 bg-black/40 backdrop-blur-md text-yellow-300 hover:text-yellow-200 border border-yellow-300/20 rounded-full pointer-events-auto active:scale-90 transition-all flex items-center gap-1.5 shadow-lg"
-            title="スキャンを成功させるコツと説明"
+            onClick={onBack} 
+            className="p-3 bg-black/30 backdrop-blur-md text-white rounded-full pointer-events-auto active:scale-90 transition-transform" 
+            id="floating-back-btn"
           >
-            <AlertCircle size={20} />
-            <span className="text-[11px] font-black tracking-wider pr-1">コツ・お困りですか？</span>
+            <ArrowLeft size={24} />
           </button>
-        )}
-        
-        {errorHeader && (
-           <button 
-             onClick={() => window.location.reload()} 
-             className="p-3 bg-blue-600/80 backdrop-blur-md text-white rounded-full pointer-events-auto"
-           >
-             <RefreshCw size={20} />
-           </button>
-        )}
-      </div>
+
+          {/* Floating Help Trigger when scanning */}
+          {isPermissionGranted && !errorHeader && (
+            <button 
+              onClick={() => setShowHelp(true)} 
+              className="p-3 bg-black/40 backdrop-blur-md text-yellow-300 hover:text-yellow-200 border border-yellow-300/20 rounded-full pointer-events-auto active:scale-90 transition-all flex items-center gap-1.5 shadow-lg"
+              title="スキャンを成功させるコツと説明"
+            >
+              <AlertCircle size={20} />
+              <span className="text-[11px] font-black tracking-wider pr-1">コツ・お困りですか？</span>
+            </button>
+          )}
+          
+          {errorHeader && (
+             <button 
+               onClick={() => window.location.reload()} 
+               className="p-3 bg-blue-600/80 backdrop-blur-md text-white rounded-full pointer-events-auto"
+             >
+               <RefreshCw size={20} />
+             </button>
+          )}
+        </div>
+      )}
 
       {/* Main Scanner Area */}
       <div className="absolute inset-0 z-0">
@@ -753,17 +755,18 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-x-0 bottom-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.2)] rounded-t-[32px] p-6 pb-8 z-50 overflow-y-auto max-h-[92dvh]"
+            transition={{ type: "spring", damping: 30, stiffness: 220 }}
+            className="fixed inset-0 bg-white z-50 overflow-y-auto p-6 pb-8 h-full min-h-[100dvh] flex flex-col"
           >
-            <div className="max-w-md mx-auto relative pt-8">
-              {/* 左上の戻るボタン */}
+            <div className="max-w-md mx-auto relative pt-12 w-full">
+              {/* 左上の戻るボタン（スキャンに戻るテキストを追加） */}
               <button
                 onClick={resetScanner}
-                className="absolute left-0 top-0 p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 rounded-full transition-all active:scale-90 flex items-center justify-center shadow-sm cursor-pointer"
+                className="absolute left-0 top-0 pl-2.5 pr-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-950 rounded-full transition-all active:scale-90 flex items-center gap-1.5 focus:outline-none shadow-sm cursor-pointer text-xs font-black"
                 title="閉じてスキャンに戻る"
               >
-                <ArrowLeft size={18} />
+                <ArrowLeft size={14} className="text-gray-600" />
+                スキャンに戻る
               </button>
               {/* Result UI handles here */}
               <div className="flex items-start gap-4 mb-6">

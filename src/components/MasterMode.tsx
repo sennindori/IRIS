@@ -157,7 +157,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   // CSV Import/Export States
   const [csvPreviewItems, setCsvPreviewItems] = useState<any[]>([]);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
-  const [importProgress, setImportProgress] = useState<{current: number; total: number} | null>(null);
+  const [importProgress, setImportProgress] = useState<{current: number; total: number; phase: 'delete' | 'import'} | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -292,40 +292,30 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     });
 
     // Fallbacks based on typical column order if headers are missing or custom
-    if (janPrimaryIdx === -1) janPrimaryIdx = 0;
-    if (janSecondaryIdx === -1 && headerRow.length > 1 && nameIdx !== 1) {
-      // If we exported from the app, it is index 1. Let's inspect:
-      // If index 1 is not name, it is highly likely to be janSecondaryIdx
-      janSecondaryIdx = 1;
-    }
+    const anyHeaderMatched = recordNumberIdx !== -1 || janPrimaryIdx !== -1 || janSecondaryIdx !== -1 || nameIdx !== -1 || makerIdx !== -1 || sizeIdx !== -1 || unitIdx !== -1 || remarksIdx !== -1 || genreIdx !== -1;
 
-    if (nameIdx === -1) {
-      if (janSecondaryIdx === 1) {
-        nameIdx = headerRow.length > 2 ? 2 : -1;
+    if (!anyHeaderMatched) {
+      // If no headers matched at all, assume the export layout or legacy layout
+      if (headerRow.length >= 9) {
+        recordNumberIdx = 0;
+        janPrimaryIdx = 1;
+        janSecondaryIdx = 2;
+        nameIdx = 3;
+        makerIdx = 4;
+        sizeIdx = 5;
+        unitIdx = 6;
+        remarksIdx = 7;
+        genreIdx = 8;
       } else {
-        nameIdx = headerRow.length > 1 ? 1 : -1;
+        janPrimaryIdx = 0;
+        janSecondaryIdx = 1;
+        nameIdx = 2;
+        if (headerRow.length > 3) makerIdx = 3;
+        if (headerRow.length > 4) sizeIdx = 4;
+        if (headerRow.length > 5) unitIdx = 5;
+        if (headerRow.length > 6) remarksIdx = 6;
+        if (headerRow.length > 7) genreIdx = 7;
       }
-    }
-
-    if (makerIdx === -1) {
-      const nextIdx = nameIdx + 1;
-      if (headerRow.length > nextIdx) makerIdx = nextIdx;
-    }
-    if (sizeIdx === -1) {
-      const nextIdx = nameIdx + 2;
-      if (headerRow.length > nextIdx) sizeIdx = nextIdx;
-    }
-    if (unitIdx === -1) {
-      const nextIdx = nameIdx + 3;
-      if (headerRow.length > nextIdx) unitIdx = nextIdx;
-    }
-    if (remarksIdx === -1) {
-      const nextIdx = nameIdx + 4;
-      if (headerRow.length > nextIdx) remarksIdx = nextIdx;
-    }
-    if (genreIdx === -1) {
-      const nextIdx = nameIdx + 5;
-      if (headerRow.length > nextIdx) genreIdx = nextIdx;
     }
 
     if (janPrimaryIdx === -1 || nameIdx === -1) {
@@ -353,11 +343,11 @@ export default function MasterMode({ onBack }: MasterModeProps) {
         janCode: cleanPrimary,
         caseJanCode: cleanSecondary || '',
         productName: productName,
-        maker: makerIdx !== -1 && cols[makerIdx] ? cols[cols[makerIdx] ? makerIdx : -1]?.trim() || '' : '',
-        size: sizeIdx !== -1 && cols[sizeIdx] ? cols[cols[sizeIdx] ? sizeIdx : -1]?.trim() || '' : '',
-        unit: unitIdx !== -1 && cols[unitIdx] ? cols[cols[unitIdx] ? unitIdx : -1]?.trim() || '個' : '個',
-        remarks: remarksIdx !== -1 && cols[remarksIdx] ? cols[cols[remarksIdx] ? remarksIdx : -1]?.trim() || '' : '',
-        genre: genreIdx !== -1 && cols[genreIdx] ? cols[cols[genreIdx] ? genreIdx : -1]?.trim() || '' : '',
+        maker: makerIdx !== -1 && cols[makerIdx] ? cols[makerIdx].trim() : '',
+        size: sizeIdx !== -1 && cols[sizeIdx] ? cols[sizeIdx].trim() : '',
+        unit: unitIdx !== -1 && cols[unitIdx] ? cols[unitIdx].trim() : '個',
+        remarks: remarksIdx !== -1 && cols[remarksIdx] ? cols[remarksIdx].trim() : '',
+        genre: genreIdx !== -1 && cols[genreIdx] ? cols[genreIdx].trim() : '',
         recordNumber: recordNumberIdx !== -1 && cols[recordNumberIdx] ? cols[recordNumberIdx].trim() : ''
       });
     }
@@ -371,32 +361,50 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     setIsCsvModalOpen(true);
   }
 
-  // Execute the import process to Firestore
+  // Execute the import process to Firestore (Deletes all existing master items first, then imports new)
   async function runCsvImport() {
     setIsImporting(true);
+    let deletedCount = 0;
     let added = 0;
-    let updated = 0;
     const total = csvPreviewItems.length;
-    setImportProgress({ current: 0, total });
-
-    // Build map of existing items for super fast client-side checks
-    const janToDocIdMap = new Map<string, string>();
-    items.forEach(item => {
-      if (item.janCode) {
-        janToDocIdMap.set(item.janCode, item.id);
-      }
-      if (item.caseJanCode) {
-        janToDocIdMap.set(item.caseJanCode, item.id);
-      }
-    });
 
     try {
+      // 1. Delete all existing master items
+      const itemsToDelete = [...items];
+      const totalToDelete = itemsToDelete.length;
+
+      for (let i = 0; i < totalToDelete; i++) {
+        const item = itemsToDelete[i];
+        await deleteDoc(doc(db, 'product_master', item.id));
+        deletedCount++;
+        setImportProgress({ current: i + 1, total: totalToDelete, phase: 'delete' });
+
+        // Breath periodically to let UI render and keep firestore happy
+        if (i % 25 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+      }
+
+      // 2. Import new items
+      setImportProgress({ current: 0, total, phase: 'import' });
+      const allRecordNumbers = new Set<string>();
+
       for (let i = 0; i < total; i++) {
         const itemData = csvPreviewItems[i];
         
-        let existingId = janToDocIdMap.get(itemData.janCode);
-        if (!existingId && itemData.caseJanCode) {
-          existingId = janToDocIdMap.get(itemData.caseJanCode);
+        let finalRecordNumber = '';
+        if (itemData.recordNumber && itemData.recordNumber.trim()) {
+          const trimmed = itemData.recordNumber.trim().toUpperCase();
+          if (!allRecordNumbers.has(trimmed)) {
+            finalRecordNumber = trimmed;
+            allRecordNumbers.add(finalRecordNumber);
+          } else {
+            finalRecordNumber = generateRecordNumber(Array.from(allRecordNumbers));
+            allRecordNumbers.add(finalRecordNumber);
+          }
+        } else {
+          finalRecordNumber = generateRecordNumber(Array.from(allRecordNumbers));
+          allRecordNumbers.add(finalRecordNumber);
         }
 
         const payload = {
@@ -408,29 +416,23 @@ export default function MasterMode({ onBack }: MasterModeProps) {
           unit: itemData.unit || null,
           remarks: itemData.remarks || null,
           genre: itemData.genre || null,
+          recordNumber: finalRecordNumber
         };
 
-        if (existingId) {
-          await updateDoc(doc(db, 'product_master', existingId), payload);
-          updated++;
-        } else {
-          await addDoc(collection(db, 'product_master'), {
-            ...payload,
-            recordNumber: itemData.recordNumber || generateRecordNumber(),
-            createdAt: serverTimestamp()
-          });
-          added++;
-        }
+        await addDoc(collection(db, 'product_master'), {
+          ...payload,
+          createdAt: serverTimestamp()
+        });
+        added++;
 
-        setImportProgress({ current: i + 1, total });
-        
-        // Minor breathable yield for UI responsiveness (every 10 items)
-        if (i % 10 === 0) {
-          await new Promise(resolve => setTimeout(resolve, 30));
+        setImportProgress({ current: i + 1, total, phase: 'import' });
+
+        if (i % 15 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 25));
         }
       }
 
-      alert(`CSVインポートが完了しました！\n新しく追加: ${added}件\n既存更新: ${updated}件`);
+      alert(`CSVインポートが完了しました！\n既存データを全 ${deletedCount} 件削除し、新規に ${added} 件のマスタデータを登録しました。`);
       setIsCsvModalOpen(false);
       setCsvPreviewItems([]);
       setImportProgress(null);
@@ -760,6 +762,8 @@ export default function MasterMode({ onBack }: MasterModeProps) {
     }
   }
 
+
+
   return (
     <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-950 font-sans text-white overflow-hidden">
       
@@ -822,7 +826,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
             <div className="flex gap-2">
               <button
                 onClick={handleCsvExport}
-                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
                 title="マスタ全件をCSVダウンロード"
               >
                 <Download size={13} className="text-blue-400" />
@@ -830,7 +834,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
                 title="CSVファイルをアップロードして一括登録・更新"
               >
                 <Upload size={13} className="text-teal-400" />
@@ -857,11 +861,11 @@ export default function MasterMode({ onBack }: MasterModeProps) {
               <select
                 value={filterStd}
                 onChange={(e) => setFilterStd(e.target.value as any)}
-                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
+                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
               >
                 <option value="all">全て表示</option>
-                <option value="std">⭐️ STD登録済み のみ</option>
-                <option value="unregistered">⚪️ STD未登録 のみ</option>
+                <option value="std">⭐️ STD登録済</option>
+                <option value="unregistered">⚪️ STD未登録</option>
               </select>
             </div>
 
@@ -874,10 +878,10 @@ export default function MasterMode({ onBack }: MasterModeProps) {
               <select
                 value={filterGenre}
                 onChange={(e) => setFilterGenre(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
+                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
               >
                 <option value="all">すべてのジャンル</option>
-                <option value="unassigned">未設定 (またはその他)</option>
+                <option value="unassigned">未設定</option>
                 <option value="水・炭酸水">水・炭酸水</option>
                 <option value="茶系飲料">茶系飲料</option>
                 <option value="ジュース">ジュース</option>
@@ -901,7 +905,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-500 max-w-sm mx-auto">
             <AlertCircle size={44} className="text-gray-600 mb-3" />
             <p className="text-sm font-black text-gray-300">商品マスタが見つかりません</p>
-            <p className="text-xs text-gray-500 leading-relaxed mt-2.5">
+            <p className="text-xs text-gray-400 leading-relaxed mt-2.5">
               まだマスタデータが登録されていないか、検索キーワードに該当がないようです。右上の<strong>「新規追加」</strong>から手動で登録、またはバーコードリーダーから保存してください。
             </p>
           </div>
@@ -913,29 +917,29 @@ export default function MasterMode({ onBack }: MasterModeProps) {
               return (
                 <div 
                   key={item.id}
-                  className={`bg-gray-900 border ${
+                  className={`relative bg-gray-900 border ${
                     isEditing ? 'border-blue-500/50 ring-4 ring-blue-950/30' : 'border-gray-800 hover:border-gray-700/80'
                   } rounded-2xl p-4 transition-all shadow-md`}
                 >
                   {isEditing ? (
                     /* EDITING VIEW */
-                    <div className="space-y-3 text-left">
-                      <div className="flex items-center justify-between border-b border-gray-800 pb-2 mb-2">
-                        <span className="text-xs font-bold font-mono text-gray-400 flex items-center gap-1.5">
-                          <Barcode size={13} className="text-blue-400" />
+                    <div className="space-y-4 text-left">
+                      <div className="flex items-center justify-between border-b border-gray-800 pb-2.5 mb-2.5">
+                        <span className="text-xs font-black font-sans text-gray-400 flex items-center gap-1.5 uppercase tracking-wider">
+                          <Edit2 size={13} className="text-blue-400" />
                           商品マスタ編集
                         </span>
                         <div className="flex gap-2">
                           <button
                             onClick={cancelEdit}
-                            className="p-1 px-2.5 bg-gray-800 hover:bg-gray-750 text-gray-400 hover:text-white font-bold text-[10px] rounded-lg transition-all"
+                            className="p-1.5 px-3 bg-gray-800 hover:bg-gray-750 text-gray-400 hover:text-white font-bold text-[10px] rounded-xl transition-all cursor-pointer"
                           >
                             キャンセル
                           </button>
                           <button
                             onClick={() => handleSaveEdit(item.id)}
                             disabled={isSaving}
-                            className="p-1 px-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-black text-[10px] rounded-lg flex items-center gap-1.5 transition-all shadow-sm shadow-blue-900/30"
+                            className="p-1.5 px-3.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-black text-[10px] rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-blue-950/20 cursor-pointer"
                           >
                             {isSaving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
                             マスタに保存
@@ -943,9 +947,9 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3.5">
+                      <div className="grid grid-cols-2 gap-3">
                         <div className="col-span-2 space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">JAN_プライマリ (必須・数字)</label>
+                          <label className="text-[10px] text-gray-455 font-black uppercase">JAN_プライマリ (必須・数字)</label>
                           <input
                             type="text"
                             inputMode="numeric"
@@ -957,7 +961,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                         </div>
 
                         <div className="col-span-2 space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">JAN_セカンダリ (任意・数字)</label>
+                          <label className="text-[10px] text-gray-455 font-black uppercase">JAN_セカンダリ (任意・数字)</label>
                           <input
                             type="text"
                             inputMode="numeric"
@@ -969,44 +973,44 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                         </div>
 
                         <div className="col-span-2 space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">商品名 (必須)</label>
+                          <label className="text-[10px] text-gray-456 font-black uppercase">商品名 (必須)</label>
                           <input
                             type="text"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-600 font-bold text-xs text-white"
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-650 font-bold text-xs text-white"
                             placeholder="商品名"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">メーカー</label>
+                          <label className="text-[10px] text-gray-457 font-black uppercase">メーカー</label>
                           <input
                             type="text"
                             value={editMaker}
                             onChange={(e) => setEditMaker(e.target.value)}
-                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-600 font-bold text-xs text-white"
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-650 font-bold text-xs text-white"
                             placeholder="メーカー名"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">サイズ (容量等)</label>
+                          <label className="text-[10px] text-gray-458 font-black uppercase">サイズ (容量等)</label>
                           <input
                             type="text"
                             value={editSize}
                             onChange={(e) => setEditSize(e.target.value)}
-                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-600 font-bold text-xs text-white"
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-650 font-bold text-xs text-white"
                             placeholder="例: 500ml, 3P"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">デフォルト単位</label>
+                          <label className="text-[10px] text-gray-459 font-black uppercase">デフォルト単位</label>
                           <select
                             value={editUnit}
                             onChange={(e) => setEditUnit(e.target.value)}
-                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-xs text-white outline-none"
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-xs text-white outline-none cursor-pointer"
                           >
                             <option value="個">個</option>
                             <option value="ケース">ケース</option>
@@ -1019,14 +1023,14 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                           </select>
                         </div>
 
-                        <div className="col-span-2 space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">ジャンル (分類)</label>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-gray-455 font-black uppercase">ジャンル</label>
                           <select
                             value={editGenre}
                             onChange={(e) => setEditGenre(e.target.value)}
-                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-xs text-white outline-none"
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-xs text-white outline-none cursor-pointer"
                           >
-                            <option value="">未設定 (またはその他)</option>
+                            <option value="">未設定</option>
                             <option value="水・炭酸水">水・炭酸水</option>
                             <option value="茶系飲料">茶系飲料</option>
                             <option value="ジュース">ジュース</option>
@@ -1037,113 +1041,151 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                         </div>
 
                         <div className="col-span-2 space-y-1">
-                          <label className="text-[10px] text-gray-400 font-black uppercase">備考</label>
+                          <label className="text-[10px] text-gray-405 font-black uppercase">備考</label>
                           <input
                             type="text"
                             value={editRemarks}
                             onChange={(e) => setEditRemarks(e.target.value)}
-                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-600 font-bold text-xs text-white"
-                            placeholder="追記したい仕様や保管棚番号など"
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 placeholder:text-gray-650 font-bold text-xs text-white"
+                            placeholder="備考を入力"
                           />
                         </div>
                       </div>
                     </div>
                   ) : (
                     /* DISPLAY VIEW */
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 text-left min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                          <span 
-                            onClick={() => setBarcodeItem(item)}
-                            className="text-xs font-black font-mono tracking-tight text-gray-300 bg-gray-800 hover:bg-gray-700 hover:text-white px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm border border-gray-700 cursor-pointer active:scale-95 transition-all"
-                            title="クリックしてプライマリバーコードを表示"
-                          >
-                            <Barcode size={12} className="text-blue-400 animate-pulse" />
-                            {item.janCode}
-                          </span>
-                          {item.caseJanCode && (
-                            <span 
-                              onClick={() => setBarcodeItem({ ...item, janCode: item.caseJanCode! })}
-                              className="text-xs font-black font-mono tracking-tight text-amber-500 bg-gray-800 hover:bg-gray-700 hover:text-white px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm border border-gray-700 cursor-pointer active:scale-95 transition-all"
-                              title="クリックしてセカンダリバーコードを表示"
-                            >
-                              <Barcode size={12} className="text-amber-400" />
-                              JAN_セカンダリ: {item.caseJanCode}
-                            </span>
-                          )}
-                          {item.maker && (
-                            <span className="text-[10px] font-black text-blue-400 bg-blue-950/40 border border-blue-900/40 px-1.5 py-0.5 rounded-md flex items-center gap-1 uppercase tracking-wider">
-                              <Building size={9} />
+                    <div className="flex flex-col text-left w-full gap-3">
+                      {/* 1行目: メーカー名、ジャンル、編集ボタン、削除ボタン */}
+                      <div className="flex items-center justify-between gap-2.5 w-full">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {item.maker ? (
+                            <span className="text-[10px] font-black text-gray-300 bg-gray-800/80 border border-gray-700/65 px-2 py-0.5 rounded-lg flex items-center gap-1 uppercase tracking-wider">
+                              <Building size={9} className="text-gray-400" />
                               {item.maker}
                             </span>
-                          )}
-                          {item.size && (
-                            <span className="text-[10px] font-extrabold text-orange-400 bg-orange-950/30 border border-orange-900/30 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                              {item.size}
-                            </span>
-                          )}
-                          {item.unit && (
-                            <span className="text-[10px] font-extrabold text-teal-400 bg-teal-950/30 border border-teal-900/30 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                              単位: {item.unit}
+                          ) : (
+                            <span className="text-[10px] font-bold text-gray-400 bg-gray-850/60 border border-gray-800/40 px-2 py-0.5 rounded-lg">
+                              メーカー未設定
                             </span>
                           )}
                           {item.genre && (
-                            <span className="text-[10px] font-black text-purple-400 bg-purple-950/30 border border-purple-900/30 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                              ジャンル: {item.genre}
+                            <span className="text-[10px] font-black text-gray-300 bg-gray-800/80 border border-gray-700/65 px-2 py-0.5 rounded-lg">
+                              {item.genre}
                             </span>
                           )}
                         </div>
-                        
-                        <h3 className="text-sm font-black text-white tracking-tight leading-snug truncate">
-                          {item.productName}
-                        </h3>
 
-                        {item.remarks && (
-                          <p className="text-[11px] text-gray-400 font-medium leading-normal mt-1 flex items-start gap-1 p-1 px-2 bg-gray-800/30 border border-gray-800/20 rounded-lg">
-                            <span className="text-gray-500 mt-0.5 font-bold shrink-0">備考:</span>
-                            <span>{item.remarks}</span>
-                          </p>
+                        <div className="flex gap-1.5 shrink-0">
+                          <button
+                            onClick={() => startEdit(item)}
+                            className="p-1.5 bg-blue-950/40 hover:bg-blue-900/40 text-blue-400 hover:text-blue-300 rounded-lg active:scale-95 transition-all border border-blue-900/30 shadow-sm flex items-center justify-center cursor-pointer"
+                            title="マスタ情報を編集"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            onClick={() => setDeletingItem(item)}
+                            className="p-1.5 bg-red-950/45 hover:bg-red-900/45 text-red-400 hover:text-red-350 rounded-lg active:scale-95 transition-all border border-red-900/20 shadow-sm flex items-center justify-center cursor-pointer"
+                            title="削除"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 2行目: 大きく商品名 */}
+                      <h3 className="text-base font-black text-white tracking-tight leading-snug">
+                        {item.productName}
+                      </h3>
+
+                      {/* 罫線 */}
+                      <div className="border-b border-gray-800/80 my-0.5" />
+
+                      {/* 3行目: サイズ、単位 */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {item.size ? (
+                          <span className="text-[11px] font-extrabold text-gray-300 bg-gray-800/80 border border-gray-700/65 px-2 py-0.5 rounded-lg">
+                            サイズ: {item.size}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold text-gray-400 border border-transparent px-2 py-0.5">
+                            サイズ: 未設定
+                          </span>
                         )}
+                        {item.unit && (
+                          <span className="text-[11px] font-extrabold text-gray-300 bg-gray-800/80 border border-gray-700/65 px-2 py-0.5 rounded-lg">
+                            単位: {item.unit}
+                          </span>
+                        )}
+                      </div>
 
-                        {/* 定番登録・解除ボタン */}
-                        <div className="mt-2.5 flex items-center">
+                      {/* 備考欄（あれば表示） */}
+                      {item.remarks && (
+                        <p className="text-[10px] text-gray-300 font-medium leading-normal p-1.5 px-2.5 bg-gray-850/35 border border-gray-800/35 rounded-xl flex items-start gap-1">
+                          <span className="text-gray-400 font-bold shrink-0">備考:</span>
+                          <span>{item.remarks}</span>
+                        </p>
+                      )}
+
+                      {/* ２カラム２行のグリッド構造 */}
+                      <div className="grid grid-cols-2 gap-y-2 gap-x-3 mt-1.5">
+                        {/* 1行目・左（カラム1）: プライマリJAN */}
+                        <div className="flex items-center justify-start w-full">
+                          <button
+                            onClick={() => setBarcodeItem(item)}
+                            className="w-full text-[11px] font-bold font-mono tracking-tight text-orange-400 bg-orange-950/20 hover:bg-orange-950/40 border border-orange-900/30 px-2 py-1 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all shadow-sm"
+                            title="クリックしてプライマリバーコードを表示"
+                          >
+                            <Barcode size={12} className="text-orange-400 shrink-0" />
+                            <span className="truncate">{item.janCode}</span>
+                          </button>
+                        </div>
+
+                        {/* 1行目・右（カラム2）: セカンダリJAN */}
+                        <div className="flex items-center justify-start w-full">
+                          {item.caseJanCode ? (
+                            <button
+                              onClick={() => setBarcodeItem({ ...item, janCode: item.caseJanCode! })}
+                              className="w-full text-[11px] font-bold font-mono tracking-tight text-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/40 border border-emerald-900/30 px-2 py-1 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all shadow-sm"
+                              title="クリックしてセカンダリバーコードを表示"
+                            >
+                              <Barcode size={12} className="text-emerald-400 shrink-0" />
+                              <span className="truncate">{item.caseJanCode}</span>
+                            </button>
+                          ) : (
+                            <div className="h-7 w-full border border-dashed border-gray-800/45 rounded-lg flex items-center justify-center text-[10px] text-gray-600 font-bold">
+                              ケースなし
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 2行目・左（カラム1）: 空欄またはプレースホルダー */}
+                        <div className="flex items-center">
+                          {/* 空欄 */}
+                        </div>
+
+                        {/* 2行目・右（カラム2、右下）: STD定番登録ボタン */}
+                        <div className="flex items-center justify-end w-full">
                           {standardItems.some((std) => std.janCode === item.janCode) ? (
                             <button
                               onClick={() => handleRemoveFromStandard(item)}
-                              className="px-2 py-0.5 bg-emerald-950/45 text-emerald-400 hover:bg-emerald-900/40 border border-emerald-900/40 text-[9px] font-black rounded-md flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                              className="px-2.5 py-1 bg-blue-950/50 hover:bg-blue-900/40 border border-blue-900/40 text-[10px] font-black rounded-lg flex items-center justify-center gap-1.5 text-blue-400 hover:text-blue-300 transition-all active:scale-95 cursor-pointer shadow-md w-full sm:w-auto"
                               title="クリックしてSTDから解除"
                             >
-                              <Check size={10} />
-                              STD登録済み
+                              <Check size={11} className="text-blue-400 shrink-0" />
+                              <span>STD</span>
                             </button>
                           ) : (
                             <button
                               onClick={() => handleRegisterToStandard(item)}
-                              className="px-2 py-0.5 bg-gray-800 hover:bg-gray-750 text-gray-450 hover:text-white border border-gray-700/60 text-[9px] font-black rounded-md flex items-center gap-0.5 transition-all active:scale-95 cursor-pointer"
+                              className="px-2.5 py-1 bg-gray-800 hover:bg-blue-950/30 hover:text-blue-400 border border-gray-700/60 hover:border-blue-900/30 text-[10px] text-gray-400 font-extrabold rounded-lg flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer shadow-md w-full sm:w-auto"
                               title="クリックしてSTDとして起用"
                             >
-                              <Plus size={10} />
-                              STDとして起用
+                              <span className="text-xs leading-none font-bold text-blue-400/90">+</span>
+                              <span>STD</span>
                             </button>
                           )}
                         </div>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5 shrink-0 justify-end">
-                        <button
-                          onClick={() => startEdit(item)}
-                          className="p-2.5 bg-gray-800 hover:bg-gray-750 text-gray-400 hover:text-white rounded-xl active:scale-95 transition-all shadow-sm flex items-center justify-center border border-gray-750"
-                          title="マスタ情報を編集"
-                        >
-                          <Edit2 size={13} />
-                        </button>
-                        <button
-                          onClick={() => setDeletingItem(item)}
-                          className="p-2.5 bg-red-950/45 hover:bg-red-900/45 text-red-400 hover:text-red-300 rounded-xl active:scale-95 transition-all shadow-sm flex items-center justify-center border border-red-900/20"
-                          title="削除"
-                        >
-                          <Trash2 size={13} />
-                        </button>
                       </div>
                     </div>
                   )}
@@ -1516,7 +1558,9 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                 <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 flex-1">
                   <Loader2 size={36} className="animate-spin text-teal-400" />
                   <div className="space-y-1">
-                    <h4 className="text-sm font-black text-white font-sans">Firestoreに書き込み・更新中...</h4>
+                    <h4 className="text-sm font-black text-white font-sans">
+                      {importProgress.phase === 'delete' ? '既存の全マスタデータを削除中...' : '新規マスタデータをインポート登録中...'}
+                    </h4>
                     <p className="text-[11px] font-mono text-gray-400 font-bold">
                       {importProgress.current} / {importProgress.total} 件処理中
                     </p>
@@ -1528,14 +1572,14 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                     />
                   </div>
                   <p className="text-[10px] text-gray-500 font-bold max-w-xs">
-                    ※ 既存の同一JAN_プライマリは自動的に更新され、新しい番号は新規登録されます。ウィンドウを閉じずにお待ちください。
+                    ※ {importProgress.phase === 'delete' ? '安全に旧マスタデータを全件クリーンアップしています。ブラウザを閉じずにお待ちください。' : 'CSVファイルの新規レコードをデータベースに登録しています。ブラウザを閉じずにお待ちください。'}
                   </p>
                 </div>
               ) : (
                 /* preview list & actions */
                 <>
                   <div className="text-[10px] text-gray-300 bg-teal-950/20 border border-teal-900/40 p-3 rounded-2xl mb-4 leading-relaxed shrink-0">
-                    💡 <strong>処理確認:</strong> データベース上に同一のJAN_プライマリが既に登録されている場合は<strong>「最新情報に更新（上書き）」</strong>され、存在しないJANは<strong>「新規に登録」</strong>されます。
+                    💡 <strong>処理確認（クリア＆再インポート）:</strong> 今回のインポート開始と同時に、<strong>「現在データベースにある商品マスタはすべて一度完全に削除」</strong>され、CSVに入力された内容で<strong>「新規に全件登録」</strong>されます。
                   </div>
 
                   {/* table preview */}
