@@ -174,7 +174,7 @@ export default function App() {
                           </h3>
                         </div>
                         <p className="text-[11px] text-gray-500 font-bold mt-2 leading-relaxed">
-                          機能名ではなく、やりたこと（補充、調べる）から選んで直感的に操作できる初心者用メニュー。
+                          機能名ではなく、やりたいこと（補充、調べる）から選んで直感的に操作できる初心者用メニュー。
                         </p>
                       </div>
                     </button>
