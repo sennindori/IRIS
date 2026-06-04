@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check, Lock, MessageSquare, Database, Star } from 'lucide-react';
+import { Scan, Eye, Edit3, LayoutGrid, QrCode, Maximize2, Copy, Check, Lock, MessageSquare, Database, Star, ArrowLeftRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppMode } from '../types';
 
@@ -9,9 +9,10 @@ interface ModeSelectorProps {
   username: string;
   onChangeUsername: (username: string) => void;
   unreadBbsCount?: number;
+  onToggleSubMode: () => void;
 }
 
-export default function ModeSelector({ onSelect, onLock, username, onChangeUsername, unreadBbsCount = 0 }: ModeSelectorProps) {
+export default function ModeSelector({ onSelect, onLock, username, onChangeUsername, unreadBbsCount = 0, onToggleSubMode }: ModeSelectorProps) {
   const [showQrModal, setShowQrModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -104,8 +105,16 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
   return (
     <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-4 pb-6 bg-gray-50 overflow-hidden">
       <header className="py-2.5 sm:py-4 shrink-0 relative flex items-center justify-between max-w-lg mx-auto w-full">
-        {/* Blank placeholder for header balance */}
-        <div className="w-10 h-10 invisible" />
+        {/* Mode Switcher Button (Top Left) */}
+        <button
+          onClick={onToggleSubMode}
+          className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-450 hover:to-amber-550 text-white rounded-xl flex items-center gap-1 shadow-md active:scale-95 transition-all text-[11px] font-black cursor-pointer"
+          title="初心者にやさしい「アシストモード」に切り替える"
+          id="advanced-toggle-to-assist"
+        >
+          <ArrowLeftRight size={11} strokeWidth={3} />
+          <span>アシストへ</span>
+        </button>
         <div className="text-center">
           <h1 className="text-3xl sm:text-4xl font-black text-blue-600 tracking-tighter">I.R.I.S</h1>
           <p className="text-[9px] sm:text-[10px] text-gray-400 font-medium uppercase mt-1 tracking-[0.25em] leading-none font-condensed">

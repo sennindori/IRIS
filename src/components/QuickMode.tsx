@@ -37,6 +37,29 @@ const MASTER_GENRES = [
   'その他'
 ];
 
+function isLargeDrink(sizeStr?: string): boolean {
+  if (!sizeStr) return false;
+  const clean = sizeStr.toLowerCase().replace(/\s+/g, '');
+  
+  if (clean.includes('l') && !clean.includes('ml')) {
+    const lMatch = clean.match(/^([\d.]+)/);
+    if (lMatch) {
+      const liters = parseFloat(lMatch[1]);
+      return liters >= 1.0;
+    }
+    return true; // standard L is >= 1.0
+  }
+  
+  const matches = clean.match(/^([\d.]+)/);
+  if (matches) {
+    const value = parseFloat(matches[1]);
+    if (clean.includes('ml') || clean.includes('g') || /^[0-9.]+$/.test(clean)) {
+      return value >= 1000;
+    }
+  }
+  return false;
+}
+
 interface QuickModeProps {
   onBack: () => void;
 }
@@ -48,6 +71,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
   const [isLoading, setIsLoading] = useState(true);
   
   // App states
+  const [sizeCategory, setSizeCategory] = useState<'large' | 'small' | null>(null);
   const [isReorderingMode, setIsReorderingMode] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -118,7 +142,15 @@ export default function QuickMode({ onBack }: QuickModeProps) {
         genre: master.genre || 'その他'
       };
     })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .filter(item => {
+      if (sizeCategory === 'large') {
+        return isLargeDrink(item.size);
+      } else if (sizeCategory === 'small') {
+        return !isLargeDrink(item.size);
+      }
+      return true;
+    });
 
   // Sort items based on custom sortOrder, with fallback to createdAt timestamp
   const sortedItems = [...mergedItems].sort((a, b) => {
@@ -273,190 +305,311 @@ export default function QuickMode({ onBack }: QuickModeProps) {
     }
   };
 
+  const handleBack = () => {
+    if (sizeCategory !== null) {
+      setSizeCategory(null);
+      setSearch('');
+    } else {
+      onBack();
+    }
+  };
+
   return (
     <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden pb-safe">
       
       {/* HEADER */}
       <header className="p-4 bg-white border-b border-gray-100 shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95">
+          <button onClick={handleBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95">
             <ArrowLeft size={18} className="text-gray-700" />
           </button>
           <div className="text-left">
-            <h2 className="text-sm font-black text-gray-900 leading-none">STD (定番) 補充発注</h2>
+            <h2 className="text-sm font-black text-gray-900 leading-none">
+              {sizeCategory === 'large' ? 'STD (大容量) 補充発注' : sizeCategory === 'small' ? 'STD (小容量) 補充発注' : 'STD (定番) 補充発注'}
+            </h2>
             <p className="text-[9px] text-gray-400 font-bold mt-1 leading-none uppercase tracking-wider">
-              Standard Replenishment Mode
+              {sizeCategory === 'large' ? 'Large Drinks' : sizeCategory === 'small' ? 'Small Drinks' : 'Standard Replenishment'}
             </p>
           </div>
         </div>
 
         {/* Mode Toggle Button */}
-        <button
-          onClick={() => setIsReorderingMode(!isReorderingMode)}
-          className={`px-4 py-2 rounded-full text-[10px] font-black flex items-center gap-1.5 transition-all shadow-sm active:scale-95 truncate cursor-pointer ${
-            isReorderingMode
-              ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-200'
-              : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-          }`}
-          title={isReorderingMode ? "通常発注モードへ戻る" : "定番アイテムを並べ替える"}
-        >
-          <TrendingUp size={12} strokeWidth={3} className={isReorderingMode ? "animate-pulse" : ""} />
-          {isReorderingMode ? '発注モードへ' : '並べ替え'}
-        </button>
+        {sizeCategory !== null && (
+          <button
+            onClick={() => setIsReorderingMode(!isReorderingMode)}
+            className={`px-4 py-2 rounded-full text-[10px] font-black flex items-center gap-1.5 transition-all shadow-sm active:scale-95 truncate cursor-pointer ${
+              isReorderingMode
+                ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-200'
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+            }`}
+            title={isReorderingMode ? "通常発注モードへ戻る" : "定番アイテムを並べ替える"}
+          >
+            <TrendingUp size={12} strokeWidth={3} className={isReorderingMode ? "animate-pulse" : ""} />
+            {isReorderingMode ? '発注モードへ' : '並べ替え'}
+          </button>
+        )}
       </header>
 
       {/* CONTENT REGION */}
       <div className="flex-1 flex flex-col min-h-0 bg-gray-50">
-        
-        {/* INFO NOTICE */}
-        <div className="bg-amber-50/50 border-b border-amber-100/50 p-2.5 px-4 flex items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center gap-2 text-[10px] font-bold text-amber-800 leading-relaxed">
-            <Star size={11} className="text-amber-500 fill-amber-500 shrink-0" />
-            <span>
-              {isReorderingMode 
-                ? "【並べ替え中】商品カードをドラッグして、または指で上下にスライドして任意の並び順に変更できます。" 
-                : "よく使われる定番登録(STD)商品の一覧です。タップして補充依頼を送信できます。"}
-            </span>
-          </div>
-        </div>
-
-        {/* SEARCH BAR (hidden in reorder mode for clarity, or available) */}
-        {!isReorderingMode && (
-          <div className="p-3 bg-white border-b border-gray-100 shrink-0">
-            <div className="relative max-w-md mx-auto">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input
-                type="text"
-                placeholder="定番リスト内から商品名やメーカーを検索..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 focus:border-amber-500 focus:bg-white rounded-2xl shadow-inner outline-none font-bold text-xs text-gray-800 transition-all placeholder:text-gray-400"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ITEMS LIST */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2.5 pb-24">
-          {isLoading ? (
-            <div className="py-24 flex flex-col items-center justify-center gap-2 text-gray-400">
-              <Loader2 className="animate-spin text-amber-500" size={24} />
-              <span className="text-xs font-bold font-sans">製品をロード中...</span>
-            </div>
-          ) : filteredItems.length === 0 ? (
-            <div className="py-24 text-center">
-              <div className="w-12 h-12 bg-gray-200/55 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Star size={20} className="stroke-[2.5]" />
+        {sizeCategory === null ? (
+          <div className="flex-1 flex flex-col justify-center items-center p-6 bg-gray-50">
+            <div className="w-full max-w-sm space-y-6 text-center">
+              <div className="space-y-2">
+                <div className="inline-flex p-3 bg-amber-50 text-amber-500 rounded-2xl border border-amber-100/50">
+                  <Star size={24} className="fill-amber-500 text-amber-500" />
+                </div>
+                <h3 className="text-sm font-black text-gray-800">定番発注のサイズを選択してください</h3>
+                <p className="text-[11px] text-gray-500 font-bold leading-normal">
+                  発注・補充するドリンクのサイズ（容量）を選択すると、<br />
+                  選択したサイズに合った定番商品リストが開きます。
+                </p>
               </div>
-              <p className="text-xs font-bold text-gray-400 max-w-xs mx-auto leading-relaxed">
-                {search 
-                  ? "一致する定番商品がありません。" 
-                  : "登録されているSTD商品がありません。「商品マスタ」から商品マスタデータを定番登録(STD)してください。"}
-              </p>
+
+              <div className="grid grid-cols-1 gap-4">
+                {/* 大容量 (1000ml以上) */}
+                <button
+                  type="button"
+                  onClick={() => setSizeCategory('large')}
+                  className="group relative p-6 bg-white hover:bg-amber-50/10 border border-gray-200 hover:border-amber-500 rounded-3xl transition-all duration-300 transform active:scale-[0.98] cursor-pointer shadow-sm hover:shadow-md text-left flex flex-col justify-between overflow-hidden"
+                >
+                  <div className="absolute right-0 top-0 w-24 h-24 bg-amber-500/5 rounded-full translate-x-6 -translate-y-6 group-hover:scale-110 transition-transform duration-300" />
+                  <div className="space-y-1">
+                    <div className="text-[9px] font-black text-amber-600 uppercase tracking-wider mb-1">
+                      Large Drinks
+                    </div>
+                    <h4 className="text-sm font-black text-gray-900 flex items-center gap-1.5 leading-none">
+                      🥤 大容量 (1000ml以上)
+                    </h4>
+                    <p className="text-[10px] text-gray-450 font-bold leading-relaxed pt-1.5 select-none">
+                      1.0L ~ 2.0L の大型ペットボトル、ケース飲料等、1000ml以上の商品を一覧表示します。
+                    </p>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-[9px] font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100/50 uppercase">
+                      1000ml 以上
+                    </span>
+                    <span className="text-xs font-black text-amber-600 group-hover:translate-x-1 transition-transform">
+                      選択する →
+                    </span>
+                  </div>
+                </button>
+
+                {/* 小容量 (1000ml未満) */}
+                <button
+                  type="button"
+                  onClick={() => setSizeCategory('small')}
+                  className="group relative p-6 bg-white hover:bg-blue-50/10 border border-gray-200 hover:border-blue-500 rounded-3xl transition-all duration-300 transform active:scale-[0.98] cursor-pointer shadow-sm hover:shadow-md text-left flex flex-col justify-between overflow-hidden"
+                >
+                  <div className="absolute right-0 top-0 w-24 h-24 bg-blue-500/5 rounded-full translate-x-6 -translate-y-6 group-hover:scale-110 transition-transform duration-300" />
+                  <div className="space-y-1">
+                    <div className="text-[9px] font-black text-blue-600 uppercase tracking-wider mb-1">
+                      Small Drinks
+                    </div>
+                    <h4 className="text-sm font-black text-gray-900 flex items-center gap-1.5 leading-none">
+                      🥫 小容量 (1000ml未満)
+                    </h4>
+                    <p className="text-[10px] text-gray-450 font-bold leading-relaxed pt-1.5 select-none">
+                      350ml、500ml などの小型ペットボトル、缶飲料等、1000ml未満の商品を一覧表示します。
+                    </p>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100/50 uppercase">
+                      1000ml 未満
+                    </span>
+                    <span className="text-xs font-black text-blue-600 group-hover:translate-x-1 transition-transform">
+                      選択する →
+                    </span>
+                  </div>
+                </button>
+              </div>
             </div>
-          ) : (
-            /* Collapsible sections grouped by genre (supported for both Normal and Reordering modes) */
-            <div className="space-y-4">
-              {MASTER_GENRES.map((genre) => {
-                const genreItems = filteredItems.filter(item => (item.genre || 'その他') === genre);
-                if (genreItems.length === 0) return null;
+          </div>
+        ) : (
+          <>
+            {/* Tab switchers to change on-the-fly */}
+            <div className="px-4 py-2 bg-white border-b border-gray-100 flex gap-2 shrink-0 select-none">
+              <button
+                type="button"
+                onClick={() => {
+                  setSizeCategory('large');
+                  setIsReorderingMode(false);
+                }}
+                className={`flex-1 py-1.5 rounded-xl text-[11px] font-black transition-all active:scale-[0.98] border cursor-pointer ${
+                  sizeCategory === 'large'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                    : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                🥤 大容量 (1000ml以上)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSizeCategory('small');
+                  setIsReorderingMode(false);
+                }}
+                className={`flex-1 py-1.5 rounded-xl text-[11px] font-black transition-all active:scale-[0.98] border cursor-pointer ${
+                  sizeCategory === 'small'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                🥫 小容量 (1000ml未満)
+              </button>
+            </div>
 
-                const isCollapsed = collapsedGenres[genre] ?? true;
+            {/* INFO NOTICE */}
+            <div className="bg-amber-50/50 border-b border-amber-100/50 p-2.5 px-4 flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2 text-[10px] font-bold text-amber-800 leading-relaxed">
+                <Star size={11} className="text-amber-500 fill-amber-500 shrink-0" />
+                <span>
+                  {isReorderingMode 
+                    ? "【並べ替え中】商品カードをドラッグして、または指で上下にスライドして任意の並び順に変更できます。" 
+                    : `よく使われる定番登録(STD)${sizeCategory === 'large' ? '大容量' : '小容量'}商品の一覧です。タップして補充依頼を送信できます。`}
+                </span>
+              </div>
+            </div>
 
-                return (
-                  <div key={genre} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden text-left">
-                    {/* Fold / Unfold trigger button */}
-                    <button
-                      type="button"
-                      onClick={() => setCollapsedGenres(prev => ({ ...prev, [genre]: !prev[genre] }))}
-                      className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between border-b border-gray-100 hover:bg-gray-100/50 transition-colors cursor-pointer select-none"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-3.5 bg-amber-500 rounded-full" />
-                        <span className="text-xs font-black text-gray-800">{genre}</span>
-                        <span className="text-[10px] font-black text-gray-500 bg-gray-200/50 px-2 py-0.5 rounded-full font-mono">
-                          {genreItems.length}
-                        </span>
-                      </div>
-                      <div className="text-gray-400">
-                        {isCollapsed ? (
-                          <ChevronDown size={14} strokeWidth={3} />
-                        ) : (
-                          <ChevronUp size={14} strokeWidth={3} />
+            {/* SEARCH BAR (hidden in reorder mode for clarity, or available) */}
+            {!isReorderingMode && (
+              <div className="p-3 bg-white border-b border-gray-100 shrink-0">
+                <div className="relative max-w-md mx-auto">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <input
+                    type="text"
+                    placeholder="定番リスト内から商品名やメーカーを検索..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 focus:border-amber-500 focus:bg-white rounded-2xl shadow-inner outline-none font-bold text-xs text-gray-800 transition-all placeholder:text-gray-400"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ITEMS LIST */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 pb-24">
+              {isLoading ? (
+                <div className="py-24 flex flex-col items-center justify-center gap-2 text-gray-400">
+                  <Loader2 className="animate-spin text-amber-500" size={24} />
+                  <span className="text-xs font-bold font-sans">製品をロード中...</span>
+                </div>
+              ) : filteredItems.length === 0 ? (
+                <div className="py-24 text-center">
+                  <div className="w-12 h-12 bg-gray-200/55 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Star size={20} className="stroke-[2.5]" />
+                  </div>
+                  <p className="text-xs font-bold text-gray-400 max-w-xs mx-auto leading-relaxed">
+                    {search 
+                      ? "一致する定番商品がありません。" 
+                      : "登録されているSTD商品がありません。「商品マスタ」から商品マスタデータを定番登録(STD)してください。"}
+                  </p>
+                </div>
+              ) : (
+                /* Collapsible sections grouped by genre (supported for both Normal and Reordering modes) */
+                <div className="space-y-4">
+                  {MASTER_GENRES.map((genre) => {
+                    const genreItems = filteredItems.filter(item => (item.genre || 'その他') === genre);
+                    if (genreItems.length === 0) return null;
+
+                    const isCollapsed = collapsedGenres[genre] ?? true;
+
+                    return (
+                      <div key={genre} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden text-left">
+                        {/* Fold / Unfold trigger button */}
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedGenres(prev => ({ ...prev, [genre]: !prev[genre] }))}
+                          className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between border-b border-gray-100 hover:bg-gray-100/50 transition-colors cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-3.5 bg-amber-500 rounded-full" />
+                            <span className="text-xs font-black text-gray-800">{genre}</span>
+                            <span className="text-[10px] font-black text-gray-500 bg-gray-200/50 px-2 py-0.5 rounded-full font-mono">
+                              {genreItems.length}
+                            </span>
+                          </div>
+                          <div className="text-gray-400">
+                            {isCollapsed ? (
+                              <ChevronDown size={14} strokeWidth={3} />
+                            ) : (
+                              <ChevronUp size={14} strokeWidth={3} />
+                            )}
+                          </div>
+                        </button>
+
+                        {/* Subitems under this genre category */}
+                        {!isCollapsed && (
+                          <div className="p-3 space-y-2.5">
+                            {genreItems.map((item, subIdx) => {
+                              const isCurrentlyDragged = draggedGenre === genre && draggedIndex === subIdx;
+                              return (
+                                <div
+                                  key={item.id}
+                                  data-genre={genre}
+                                  data-genre-idx={subIdx}
+                                  draggable={isReorderingMode}
+                                  onDragStart={() => handleDragStart(genre, subIdx)}
+                                  onDragOver={handleDragOver}
+                                  onDragEnter={() => handleDragEnter(genre, subIdx)}
+                                  onDragEnd={handleDragEnd}
+                                  onTouchStart={(e) => handleTouchStart(genre, subIdx, e)}
+                                  onTouchMove={handleTouchMove}
+                                  onTouchEnd={handleTouchEnd}
+                                  className={`bg-white border rounded-2xl p-3 flex items-center justify-between hover:shadow-md transition-all relative overflow-hidden select-none ${
+                                    isReorderingMode 
+                                      ? 'cursor-grab active:cursor-grabbing border-amber-200 bg-amber-50/5 shadow-sm' 
+                                      : 'border-gray-100 hover:border-amber-100'
+                                  } ${isCurrentlyDragged ? 'opacity-40 border-dashed border-amber-500 bg-amber-50/30 scale-[0.98]' : ''}`}
+                                >
+                                  <div className="flex-1 min-w-0 pr-4 text-left">
+                                    <div className="flex flex-wrap items-center gap-1.5 mb-1 text-[9px] font-bold">
+                                      {item.maker && (
+                                        <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-0.5 border border-amber-100/50">
+                                          <Building size={8} />
+                                          {item.maker}
+                                        </span>
+                                      )}
+                                      {item.size && (
+                                        <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-md">
+                                          {item.size}
+                                        </span>
+                                      )}
+                                      <span className="text-[8px] font-mono font-bold text-gray-400 bg-gray-50 px-1 rounded border border-gray-100">
+                                        JAN: {item.janCode}
+                                      </span>
+                                    </div>
+
+                                    <h3 className="text-xs font-extrabold text-gray-900 leading-snug truncate">
+                                      {item.displayName}
+                                    </h3>
+                                  </div>
+
+                                  {isReorderingMode ? (
+                                    <div className="flex items-center gap-1 shrink-0 p-2 rounded-xl bg-amber-50 border border-amber-200/50 cursor-grab active:cursor-grabbing">
+                                      <GripVertical size={16} strokeWidth={2.5} className="text-amber-600 animate-pulse" />
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleSelectItem(item)}
+                                      className="px-3.5 py-2.5 bg-gray-900 hover:bg-amber-600 text-white hover:text-white rounded-xl font-bold text-[10px] active:scale-95 transition-all truncate shrink-0 cursor-pointer shadow-sm shadow-gray-200/50"
+                                    >
+                                      補 充
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
-                    </button>
-
-                    {/* Subitems under this genre category */}
-                    {!isCollapsed && (
-                      <div className="p-3 space-y-2.5">
-                        {genreItems.map((item, subIdx) => {
-                          const isCurrentlyDragged = draggedGenre === genre && draggedIndex === subIdx;
-                          return (
-                            <div
-                              key={item.id}
-                              data-genre={genre}
-                              data-genre-idx={subIdx}
-                              draggable={isReorderingMode}
-                              onDragStart={() => handleDragStart(genre, subIdx)}
-                              onDragOver={handleDragOver}
-                              onDragEnter={() => handleDragEnter(genre, subIdx)}
-                              onDragEnd={handleDragEnd}
-                              onTouchStart={(e) => handleTouchStart(genre, subIdx, e)}
-                              onTouchMove={handleTouchMove}
-                              onTouchEnd={handleTouchEnd}
-                              className={`bg-white border rounded-2xl p-3 flex items-center justify-between hover:shadow-md transition-all relative overflow-hidden select-none ${
-                                isReorderingMode 
-                                  ? 'cursor-grab active:cursor-grabbing border-amber-200 bg-amber-50/5 shadow-sm' 
-                                  : 'border-gray-100 hover:border-amber-100'
-                              } ${isCurrentlyDragged ? 'opacity-40 border-dashed border-amber-500 bg-amber-50/30 scale-[0.98]' : ''}`}
-                            >
-                              <div className="flex-1 min-w-0 pr-4 text-left">
-                                <div className="flex flex-wrap items-center gap-1.5 mb-1 text-[9px] font-bold">
-                                  {item.maker && (
-                                    <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-0.5 border border-amber-100/50">
-                                      <Building size={8} />
-                                      {item.maker}
-                                    </span>
-                                  )}
-                                  {item.size && (
-                                    <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-md">
-                                      {item.size}
-                                    </span>
-                                  )}
-                                  <span className="text-[8px] font-mono font-bold text-gray-400 bg-gray-50 px-1 rounded border border-gray-100">
-                                    JAN: {item.janCode}
-                                  </span>
-                                </div>
-
-                                <h3 className="text-xs font-extrabold text-gray-900 leading-snug truncate">
-                                  {item.displayName}
-                                </h3>
-                              </div>
-
-                              {isReorderingMode ? (
-                                <div className="flex items-center gap-1 shrink-0 p-2 rounded-xl bg-amber-50 border border-amber-200/50 cursor-grab active:cursor-grabbing">
-                                  <GripVertical size={16} strokeWidth={2.5} className="text-amber-600 animate-pulse" />
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => handleSelectItem(item)}
-                                  className="px-3.5 py-2.5 bg-gray-900 hover:bg-amber-600 text-white hover:text-white rounded-xl font-bold text-[10px] active:scale-95 transition-all truncate shrink-0 cursor-pointer shadow-sm shadow-gray-200/50"
-                                >
-                                  補 充
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* REPLENISHMENT MODAL (BOTTOM DRAWER/BOTTOM SHEET) */}
