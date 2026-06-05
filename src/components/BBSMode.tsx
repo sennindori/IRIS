@@ -338,7 +338,7 @@ export default function BBSMode({ onBack, username }: BBSModeProps) {
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden pt-[env(safe-area-inset-top)]">
       {/* Header */}
       <header className="py-4 px-4 bg-white border-b border-gray-100 flex items-center justify-between shrink-0 shadow-sm">
         <button

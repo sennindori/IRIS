@@ -315,7 +315,7 @@ export default function QuickMode({ onBack }: QuickModeProps) {
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden pb-safe">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden pt-[env(safe-area-inset-top)] pb-safe">
       
       {/* HEADER */}
       <header className="p-4 bg-white border-b border-gray-100 shrink-0 flex items-center justify-between">

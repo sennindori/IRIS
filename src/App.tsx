@@ -132,7 +132,7 @@ export default function App() {
             className="w-full h-full"
           >
             {subMode === 'selection' && (
-              <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-6 bg-slate-50 overflow-hidden select-none">
+              <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-6 pt-[calc(env(safe-area-inset-top)+20px)] bg-slate-50 overflow-hidden select-none">
                 <header className="py-4 text-center shrink-0">
                   <h1 className="text-3xl font-black text-blue-600 tracking-tighter">I.R.I.S</h1>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">

@@ -103,7 +103,7 @@ export default function ModeSelector({ onSelect, onLock, username, onChangeUsern
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-4 pb-6 bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-6 bg-gray-50 overflow-hidden">
       <header className="py-2.5 sm:py-4 shrink-0 relative flex items-center justify-between max-w-lg mx-auto w-full">
         {/* Mode Switcher Button (Top Left) */}
         <button

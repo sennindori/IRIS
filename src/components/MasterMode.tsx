@@ -796,7 +796,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
 
 
   return (
-    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-950 font-sans text-white overflow-hidden">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-950 font-sans text-white overflow-hidden pt-[env(safe-area-inset-top)]">
       
       {/* HEADER SECTION */}
       <header className="px-4 py-4 shrink-0 bg-gray-900 border-b border-gray-800 flex items-center justify-between">

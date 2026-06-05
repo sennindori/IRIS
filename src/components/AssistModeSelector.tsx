@@ -52,7 +52,7 @@ export default function AssistModeSelector({
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-4 pb-6 bg-slate-50 overflow-hidden select-none">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] p-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-6 bg-slate-50 overflow-hidden select-none">
       
       {/* HEADER REGION */}
       <header className="py-2.5 sm:py-4 shrink-0 flex items-center justify-between max-w-lg mx-auto w-full border-b border-gray-100">

@@ -584,7 +584,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     <div className="relative h-[100dvh] max-h-[100dvh] bg-black overflow-hidden font-sans">
       {/* Floating Back Button & UI Overlay */}
       {!scannedCode && (
-        <div className="absolute top-0 left-0 right-0 p-4 pt-6 flex items-center justify-between z-30 pointer-events-none">
+         <div className="absolute top-0 left-0 right-0 p-4 pt-[calc(env(safe-area-inset-top)+16px)] flex items-center justify-between z-30 pointer-events-none">
           <button 
             onClick={onBack} 
             className="p-3 bg-black/30 backdrop-blur-md text-white rounded-full pointer-events-auto active:scale-90 transition-transform" 

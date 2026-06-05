@@ -359,7 +359,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
   });
 
   return (
-    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-950 text-white select-none overflow-hidden pb-safe">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-gray-950 text-white select-none overflow-hidden pt-[env(safe-area-inset-top)] pb-safe">
       <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
       
       {/* Header Bar */}
