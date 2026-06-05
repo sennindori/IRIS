@@ -17,7 +17,7 @@ import MasterMode from './components/MasterMode';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from './lib/firebase';
-import { HelpCircle, ChevronRight, Sparkles, LayoutGrid } from 'lucide-react';
+import { HelpCircle, ChevronRight, Sparkles, LayoutGrid, ChevronDown } from 'lucide-react';
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('menu');
@@ -26,6 +26,7 @@ export default function App() {
   const [username, setUsername] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [unreadBbsCount, setUnreadBbsCount] = useState<number>(0);
+  const [isSelectionExpanded, setIsSelectionExpanded] = useState<boolean>(false);
 
   useEffect(() => {
     const verified = localStorage.getItem('app_passcode_verified');
@@ -151,7 +152,38 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div className="w-full flex flex-col gap-4">
+                  <button
+                    onClick={() => setIsSelectionExpanded(!isSelectionExpanded)}
+                    className="flex items-center justify-between w-full px-5 py-4 bg-white hover:bg-gray-50 border border-gray-200/80 rounded-[24px] transition-all duration-200 active:scale-[0.98] shadow-sm cursor-pointer group"
+                    id="toggle-selection-panel"
+                  >
+                    <span className="flex items-center gap-2.5 font-bold text-gray-800 text-sm">
+                      <LayoutGrid size={18} className="text-blue-600 group-hover:scale-110 transition-transform" />
+                      操作メニューを表示する
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400 font-extrabold tracking-wider mr-0.5">
+                        {isSelectionExpanded ? '閉じる' : '展開する'}
+                      </span>
+                      <motion.div
+                        animate={{ rotate: isSelectionExpanded ? 180 : 0 }}
+                        transition={{ duration: 0.25 }}
+                        className="text-gray-400"
+                      >
+                        <ChevronDown size={18} />
+                      </motion.div>
+                    </div>
+                  </button>
+
+                  <motion.div
+                    initial={false}
+                    animate={{
+                      height: isSelectionExpanded ? 'auto' : 0,
+                      opacity: isSelectionExpanded ? 1 : 0,
+                    }}
+                    transition={{ duration: 0.35, ease: 'easeInOut' }}
+                    className="w-full flex flex-col gap-4 overflow-hidden"
+                  >
                     {/* アシストモード */}
                     <button
                       onClick={() => {
@@ -200,7 +232,7 @@ export default function App() {
                         </p>
                       </div>
                     </button>
-                  </div>
+                  </motion.div>
                 </div>
 
                 <footer className="mt-auto text-center py-2 shrink-0 text-[10px] text-gray-400 font-bold">

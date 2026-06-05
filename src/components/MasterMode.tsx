@@ -21,7 +21,9 @@ import {
   Download,
   Upload,
   Star,
-  Filter
+  Filter,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { 
@@ -121,6 +123,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<ProductMasterItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState<boolean>(false);
   
   // Registration form states
   const [showAddForm, setShowAddForm] = useState(false);
@@ -831,114 +834,183 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       </header>
 
       {/* SEARCH / CONTROLS */}
-      <div className="p-4 bg-gray-900/50 border-b border-gray-800 shrink-0">
-        <div className="max-w-xl mx-auto flex flex-col gap-3">
-          {/* Main search and CSV actions row */}
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="品番(JAN_プライマリ/セカンダリ)、商品名、メーカー、サイズから検索..."
-                className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 text-xs font-bold placeholder:text-gray-500 text-white outline-none transition-all"
-              />
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-700 hover:bg-gray-650 rounded-full text-gray-400"
-                >
-                  <X size={10} />
-                </button>
+      <div className="p-3 bg-gray-900/30 border-b border-gray-800 shrink-0">
+        <div className="max-w-xl mx-auto flex flex-col gap-2">
+          {/* Accordion Trigger Header */}
+          <button
+            onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
+            className="flex items-center justify-between w-full px-4 py-2.5 bg-gray-900 hover:bg-gray-850 border border-gray-800 rounded-xl transition-all duration-200 active:scale-[0.99] cursor-pointer group"
+            id="toggle-master-filters"
+          >
+            <div className="flex items-center gap-2 overflow-hidden">
+              <Search size={14} className="text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+              <span className="text-xs font-black text-gray-200 whitespace-nowrap">
+                検索・フィルター・CSV操作
+              </span>
+              {/* Active filters status badge */}
+              {(search || filterStd !== 'all' || filterGenre !== 'all' || filterSize !== 'all') && (
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
               )}
             </div>
             
-            <div className="flex gap-2">
-              <button
-                onClick={handleCsvExport}
-                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-                title="マスタ全件をCSVダウンロード"
-              >
-                <Download size={13} className="text-blue-400" />
-                CSV出力
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-                title="CSVファイルをアップロードして一括登録・更新"
-              >
-                <Upload size={13} className="text-teal-400" />
-                CSV取込
-              </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept=".csv"
-                className="hidden"
-              />
-            </div>
-          </div>
-
-          {/* Detailed filters row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-gray-900/60 p-3 rounded-2xl border border-gray-800/85">
-            {/* STD classification selector */}
-            <div className="flex flex-col text-left gap-1.5">
-              <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
-                <Star size={10} className="fill-amber-500 text-amber-500" />
-                STD区分
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-gray-400 font-extrabold whitespace-nowrap">
+                {isFiltersExpanded ? '折りたたむ' : '展開する'}
               </span>
-              <select
-                value={filterStd}
-                onChange={(e) => setFilterStd(e.target.value as any)}
-                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
+              <motion.div
+                animate={{ rotate: isFiltersExpanded ? 180 : 0 }}
+                transition={{ duration: 0.2 }}
+                className="text-gray-400 shrink-0"
               >
-                <option value="all">全て表示</option>
-                <option value="std">⭐️ STD登録済</option>
-                <option value="unregistered">⚪️ STD未登録</option>
-              </select>
+                <ChevronDown size={14} />
+              </motion.div>
             </div>
+          </button>
 
-            {/* Genre classification selector */}
-            <div className="flex flex-col text-left gap-1.5">
-              <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
-                <Filter size={10} className="text-purple-400" />
-                ジャンル
-              </span>
-              <select
-                value={filterGenre}
-                onChange={(e) => setFilterGenre(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
-              >
-                <option value="all">すべてのジャンル</option>
-                <option value="unassigned">未設定</option>
-                <option value="水・炭酸水">水・炭酸水</option>
-                <option value="茶系飲料">茶系飲料</option>
-                <option value="ジュース">ジュース</option>
-                <option value="紅茶・コーヒー">紅茶・コーヒー</option>
-                <option value="健康飲料">健康飲料</option>
-                <option value="エナジー飲料">エナジー飲料</option>
-              </select>
+          {/* Active filter summary info when collapsed */}
+          {!isFiltersExpanded && (search || filterStd !== 'all' || filterGenre !== 'all' || filterSize !== 'all') && (
+            <div className="flex items-center gap-1.5 flex-wrap px-1.5 py-1">
+              {search && (
+                <span className="bg-blue-500/10 text-blue-400 text-[9px] px-1.5 py-0.5 rounded font-black border border-blue-500/10 max-w-[120px] truncate" title={search}>
+                  🔍 {search}
+                </span>
+              )}
+              {filterStd !== 'all' && (
+                <span className="bg-amber-500/10 text-amber-400 text-[9px] px-1.5 py-0.5 rounded font-black border border-amber-500/10">
+                  ⭐️ {filterStd === 'std' ? 'STD' : '非STD'}
+                </span>
+              )}
+              {filterGenre !== 'all' && (
+                <span className="bg-purple-500/10 text-purple-400 text-[9px] px-1.5 py-0.5 rounded font-black border border-purple-500/10">
+                  📁 {filterGenre === 'unassigned' ? '未設定' : filterGenre}
+                </span>
+              )}
+              {filterSize !== 'all' && (
+                <span className="bg-teal-500/10 text-teal-400 text-[9px] px-1.5 py-0.5 rounded font-black border border-teal-500/10">
+                  🥤 {filterSize === 'large' ? '大' : '小'}
+                </span>
+              )}
             </div>
+          )}
 
-            {/* Size classification selector */}
-            <div className="flex flex-col text-left gap-1.5">
-              <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
-                <span className="text-xs">🥤</span>
-                容量サイズ
-              </span>
-              <select
-                value={filterSize}
-                onChange={(e) => setFilterSize(e.target.value as any)}
-                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
-              >
-                <option value="all">すべて表示</option>
-                <option value="large">大飲料 (1000ml以上)</option>
-                <option value="small">小飲料 (1000ml未満)</option>
-              </select>
+          <motion.div
+            initial={false}
+            animate={{
+              height: isFiltersExpanded ? 'auto' : 0,
+              opacity: isFiltersExpanded ? 1 : 0,
+            }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="w-full overflow-hidden"
+          >
+            <div className="flex flex-col gap-3 pt-2">
+              {/* Main search and CSV actions row */}
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="品番(JAN_プライマリ/セカンダリ)、商品名、メーカー、サイズから検索..."
+                    className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-4 focus:ring-blue-950 focus:border-blue-500 text-xs font-bold placeholder:text-gray-500 text-white outline-none transition-all"
+                  />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                  {search && (
+                    <button
+                      onClick={() => setSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-700 hover:bg-gray-655 rounded-full text-gray-400"
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCsvExport}
+                    className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                    title="マスタ全件をCSVダウンロード"
+                  >
+                    <Download size={13} className="text-blue-400" />
+                    CSV出力
+                  </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-gray-200 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                    title="CSVファイルをアップロードして一括登録・更新"
+                  >
+                    <Upload size={13} className="text-teal-400" />
+                    CSV取込
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept=".csv"
+                    className="hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Detailed filters row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-gray-900/60 p-3 rounded-2xl border border-gray-800/85">
+                {/* STD classification selector */}
+                <div className="flex flex-col text-left gap-1.5">
+                  <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
+                    <Star size={10} className="fill-amber-500 text-amber-500" />
+                    STD区分
+                  </span>
+                  <select
+                    value={filterStd}
+                    onChange={(e) => setFilterStd(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
+                  >
+                    <option value="all">全て表示</option>
+                    <option value="std">⭐️ STD登録済</option>
+                    <option value="unregistered">⚪️ STD未登録</option>
+                  </select>
+                </div>
+
+                {/* Genre classification selector */}
+                <div className="flex flex-col text-left gap-1.5">
+                  <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
+                    <Filter size={10} className="text-purple-400" />
+                    ジャンル
+                  </span>
+                  <select
+                    value={filterGenre}
+                    onChange={(e) => setFilterGenre(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
+                  >
+                    <option value="all">すべてのジャンル</option>
+                    <option value="unassigned">未設定</option>
+                    <option value="水・炭酸水">水・炭酸水</option>
+                    <option value="茶系飲料">茶系飲料</option>
+                    <option value="ジュース">ジュース</option>
+                    <option value="紅茶・コーヒー">紅茶・コーヒー</option>
+                    <option value="健康飲料">健康飲料</option>
+                    <option value="エナジー飲料">エナジー飲料</option>
+                  </select>
+                </div>
+
+                {/* Size classification selector */}
+                <div className="flex flex-col text-left gap-1.5">
+                  <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
+                    <span className="text-xs">🥤</span>
+                    容量サイズ
+                  </span>
+                  <select
+                    value={filterSize}
+                    onChange={(e) => setFilterSize(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
+                  >
+                    <option value="all">すべて表示</option>
+                    <option value="large">大飲料 (1000ml以上)</option>
+                    <option value="small">小飲料 (1000ml未満)</option>
+                  </select>
+                </div>
+              </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
 
