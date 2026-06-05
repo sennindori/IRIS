@@ -70,7 +70,7 @@ export default function AssistModeSelector({
         {/* LOGO */}
         <div className="text-center flex-1">
           <h1 className="text-2xl font-black text-gray-800 tracking-tighter leading-none flex items-center justify-center gap-1">
-            IRIS <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-md font-black tracking-normal uppercase shrink-0">アシスト</span>
+            あいりす <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-md font-black tracking-normal uppercase shrink-0">アシスト</span>
           </h1>
         </div>
 

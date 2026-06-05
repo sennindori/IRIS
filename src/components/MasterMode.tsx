@@ -38,6 +38,29 @@ import {
 import { ProductMasterItem } from '../types';
 import { generateRecordNumber } from '../lib/id';
 
+function isLargeDrink(sizeStr?: string): boolean {
+  if (!sizeStr) return false;
+  const clean = sizeStr.toLowerCase().replace(/\s+/g, '');
+  
+  if (clean.includes('l') && !clean.includes('ml')) {
+    const lMatch = clean.match(/^([\d.]+)/);
+    if (lMatch) {
+      const liters = parseFloat(lMatch[1]);
+      return liters >= 1.0;
+    }
+    return true; // standard L is >= 1.0
+  }
+  
+  const matches = clean.match(/^([\d.]+)/);
+  if (matches) {
+    const value = parseFloat(matches[1]);
+    if (clean.includes('ml') || clean.includes('g') || /^[0-9.]+$/.test(clean)) {
+      return value >= 1000;
+    }
+  }
+  return false;
+}
+
 interface MasterModeProps {
   onBack: () => void;
 }
@@ -153,6 +176,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [filterStd, setFilterStd] = useState<'all' | 'std' | 'unregistered'>('all');
   const [filterGenre, setFilterGenre] = useState<string>('all');
+  const [filterSize, setFilterSize] = useState<'all' | 'large' | 'small'>('all');
 
   // CSV Import/Export States
   const [csvPreviewItems, setCsvPreviewItems] = useState<any[]>([]);
@@ -598,6 +622,13 @@ export default function MasterMode({ onBack }: MasterModeProps) {
       }
     }
 
+    // 2.5. Size filter
+    if (filterSize !== 'all') {
+      const isLarge = isLargeDrink(item.size || '');
+      if (filterSize === 'large' && !isLarge) return false;
+      if (filterSize === 'small' && isLarge) return false;
+    }
+
     // 3. Search text filter
     const term = search.toLowerCase();
     return (
@@ -851,7 +882,7 @@ export default function MasterMode({ onBack }: MasterModeProps) {
           </div>
 
           {/* Detailed filters row */}
-          <div className="grid grid-cols-2 gap-2.5 bg-gray-900/60 p-3 rounded-2xl border border-gray-800/85">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-gray-900/60 p-3 rounded-2xl border border-gray-800/85">
             {/* STD classification selector */}
             <div className="flex flex-col text-left gap-1.5">
               <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
@@ -888,6 +919,23 @@ export default function MasterMode({ onBack }: MasterModeProps) {
                 <option value="紅茶・コーヒー">紅茶・コーヒー</option>
                 <option value="健康飲料">健康飲料</option>
                 <option value="エナジー飲料">エナジー飲料</option>
+              </select>
+            </div>
+
+            {/* Size classification selector */}
+            <div className="flex flex-col text-left gap-1.5">
+              <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider pl-1 flex items-center gap-1">
+                <span className="text-xs">🥤</span>
+                容量サイズ
+              </span>
+              <select
+                value={filterSize}
+                onChange={(e) => setFilterSize(e.target.value as any)}
+                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-755 border border-gray-700 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-[11px] cursor-pointer transition-all"
+              >
+                <option value="all">すべて表示</option>
+                <option value="large">大飲料 (1000ml以上)</option>
+                <option value="small">小飲料 (1000ml未満)</option>
               </select>
             </div>
           </div>
