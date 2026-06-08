@@ -59,6 +59,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
   // Collapse states for genres by tab
   const [collapsedGenresView, setCollapsedGenresView] = useState<Record<string, boolean>>({});
   const [collapsedGenresEdit, setCollapsedGenresEdit] = useState<Record<string, boolean>>({});
+  const [selectedGroupJan, setSelectedGroupJan] = useState<string | null>(null);
   
   // Audio state & control for live updates
   const [audioMuted, setAudioMuted] = useState(false);
@@ -304,6 +305,16 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
       alert("保存に失敗しました。しばらく経ってから再度お試しください。");
     }
   }
+
+  // Helper to retrieve live replenishment items in the selected group for modal view
+  const getSelectedGroupItems = () => {
+    if (!selectedGroupJan) return [];
+    if (selectedGroupJan.startsWith('nojan-')) {
+      const id = selectedGroupJan.replace('nojan-', '');
+      return items.filter(i => i.id === id);
+    }
+    return items.filter(i => i.janCode && i.janCode.trim() === selectedGroupJan);
+  };
 
   // Helper to determine the genre of a replenishment item
   const getGenreForItem = (item: ReplenishmentItem) => {
@@ -571,80 +582,158 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                               <div className="p-4 pt-1 border-t border-gray-800/40">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mt-2">
                                   <AnimatePresence initial={false}>
-                                    {genreItems.map((item) => (
-                                      <motion.div
-                                        key={item.id}
-                                        layout="position"
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.95 }}
-                                        className="group relative bg-gray-900 border border-gray-800/65 rounded-xl p-3 shadow-md flex flex-col justify-between text-left hover:border-gray-700/65 transition-colors"
-                                      >
-                                        <div className="flex flex-col h-full justify-between">
-                                          <div>
-                                            {/* 1行目: サブカテゴリバッジのみ */}
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                              <span className={`px-1.5 py-0.5 text-[10px] font-black rounded-md border uppercase tracking-wider truncate ${
-                                                item.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
-                                                item.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                                                item.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
-                                                item.subcategory === 'その他' ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/60' :
-                                                'bg-blue-500/20 text-blue-355 border-blue-500/30'
-                                              }`}>
-                                                {item.subcategory || '通常'}
-                                              </span>
-                                            </div>
+                                    {(() => {
+                                      // 1. Group active genreItems by JAN inside this genre
+                                      const groups: Record<string, ReplenishmentItem[]> = {};
+                                      genreItems.forEach((item) => {
+                                        const key = item.janCode && item.janCode.trim() !== '' 
+                                          ? item.janCode.trim() 
+                                          : `nojan-${item.id}`;
+                                        if (!groups[key]) {
+                                          groups[key] = [];
+                                        }
+                                        groups[key].push(item);
+                                      });
 
-                                            {/* 2行目: メーカー名＋品名 */}
-                                            <div className="mt-2">
-                                              {item.maker && (
-                                                <div className="text-[11px] font-medium text-gray-400 mb-0.5 truncate" title={item.maker}>
-                                                  {item.maker}
+                                      // 2. Render each group
+                                      return Object.entries(groups).map(([groupKey, groupItems]) => {
+                                        const representativeItem = groupItems[0];
+                                        const isSelected = selectedGroupJan === groupKey;
+
+                                        // Aggregated quantities
+                                        const totalQuantity = groupItems.reduce(
+                                          (sum, item) => sum + (parseInt(item.quantity) || 0), 
+                                          0
+                                        );
+                                        const totalFulfilled = groupItems.reduce(
+                                          (sum, item) => sum + (item.fulfilledQuantity || 0), 
+                                          0
+                                        );
+                                        const totalRemaining = Math.max(0, totalQuantity - totalFulfilled);
+
+                                        // Unique listed subcategories (売り場)
+                                        const uniqueSubcategories = Array.from(
+                                          new Set(groupItems.map(item => item.subcategory || '通常'))
+                                        );
+
+                                        // Determine latest createdAt timestamp
+                                        const latestCreatedAt = groupItems.reduce((latest, item) => {
+                                          if (!latest) return item.createdAt;
+                                          if (!item.createdAt) return latest;
+                                          return item.createdAt.seconds > latest.seconds ? item.createdAt : latest;
+                                        }, groupItems[0].createdAt);
+
+                                        return (
+                                          <motion.div
+                                            key={groupKey}
+                                            layout="position"
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.95 }}
+                                            onClick={() => setSelectedGroupJan(groupKey)}
+                                            className={`group relative bg-gray-900 border rounded-xl p-3.5 shadow-md flex flex-col justify-between text-left hover:border-gray-700/65 hover:bg-gray-850/40 transition-all cursor-pointer select-none active:scale-[0.98] ${
+                                              isSelected ? 'border-blue-500/50 shadow-blue-500/10 bg-gray-850/50' : 'border-gray-800/65'
+                                            }`}
+                                          >
+                                            <div className="flex flex-col h-full justify-between">
+                                              <div>
+                                                {/* Header Line inside card: Unique Subcategories List */}
+                                                <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                                  <div className="flex items-center gap-1 flex-wrap">
+                                                    {uniqueSubcategories.map(sub => (
+                                                      <span 
+                                                        key={sub}
+                                                        className={`px-1.5 py-0.5 text-[9px] font-black rounded-md border uppercase tracking-wider ${
+                                                          sub === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/20' :
+                                                          sub === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/20' :
+                                                          sub === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/20' :
+                                                          sub === 'その他' ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/60' :
+                                                          'bg-blue-500/20 text-blue-355 border-blue-500/20'
+                                                        }`}
+                                                      >
+                                                        {sub}
+                                                      </span>
+                                                    ))}
+                                                    {groupItems.length > 1 && (
+                                                      <span className="bg-gray-800/80 text-gray-300 border border-gray-700/60 font-extrabold text-[9px] px-1.5 py-0.5 rounded-md">
+                                                        合算: {groupItems.length}件
+                                                      </span>
+                                                    )}
+                                                  </div>
+
+                                                  <div className="text-gray-500 group-hover:text-blue-400 transition-colors shrink-0">
+                                                    <span className="text-[10px] font-bold">詳細 ➜</span>
+                                                  </div>
                                                 </div>
-                                              )}
-                                              <h3 className="text-sm font-black text-white leading-tight break-all line-clamp-2" title={item.productName}>
-                                                {item.productName}
-                                              </h3>
-                                            </div>
 
-                                            {/* 3行目: ー区切り線ー */}
-                                            <div className="border-t border-gray-800/65 my-2"></div>
+                                                {/* Maker name + ProductName */}
+                                                <div className="mt-2.5">
+                                                  {representativeItem.maker && (
+                                                    <div className="text-[11px] font-medium text-gray-400 mb-0.5 truncate" title={representativeItem.maker}>
+                                                      {representativeItem.maker}
+                                                    </div>
+                                                  )}
+                                                  <h3 className="text-sm font-black text-white leading-tight break-all line-clamp-2" title={representativeItem.productName}>
+                                                    {representativeItem.productName}
+                                                  </h3>
+                                                </div>
 
-                                            {/* 4行目: JAN */}
-                                            <div className="flex items-center gap-1 text-[10px] text-gray-500 font-mono">
-                                              <span className="text-gray-600 font-bold">JAN:</span>
-                                              <span className="text-blue-400 font-bold tracking-wider">{item.janCode}</span>
-                                            </div>
+                                                {/* Separator inside card */}
+                                                <div className="border-t border-gray-800/65 my-2"></div>
 
-                                            {/* 5行目: 受付数｜対応数｜残り数 */}
-                                            <div className="flex items-center gap-2 text-xs font-bold text-gray-300 mt-1.5 flex-wrap">
-                                              <div className="flex items-center gap-1">
-                                                <span className="text-[9px] text-gray-500 font-black uppercase">受付:</span>
-                                                <span className="text-blue-400 font-extrabold">{item.quantity}{item.unit || '個'}</span>
+                                                {/* JAN */}
+                                                {representativeItem.janCode && (
+                                                  <div className="flex items-center gap-1 text-[10px] text-gray-500 font-mono mb-2">
+                                                    <span className="text-gray-600 font-bold">JAN:</span>
+                                                    <span className="text-blue-400 font-bold tracking-wider">{representativeItem.janCode}</span>
+                                                  </div>
+                                                )}
+
+                                                {/* Total Aggregated quantity counters */}
+                                                <div className="grid grid-cols-2 gap-1.5 bg-gray-950/30 p-1.5 rounded-xl border border-gray-850/80">
+                                                  {/* 左上: 合計受付 */}
+                                                  <div className="bg-gray-950/75 p-2 rounded-lg border border-gray-900/55 flex flex-col">
+                                                    <span className="text-[9px] text-gray-500 font-black text-left">合計受付</span>
+                                                    <span className="text-blue-400 font-black text-sm mt-0.5 text-right">{totalQuantity}{representativeItem.unit || '個'}</span>
+                                                  </div>
+                                                  {/* 右上: 残り */}
+                                                  <div className="bg-gray-950/75 p-2 rounded-lg border border-gray-900/55 flex flex-col">
+                                                    <span className="text-[9px] text-gray-500 font-black text-left">残り</span>
+                                                    <span className={`font-black text-sm mt-0.5 text-right ${totalRemaining > 0 ? 'text-orange-400' : 'text-emerald-500'}`}>
+                                                      {totalRemaining}{representativeItem.unit || '個'}
+                                                    </span>
+                                                  </div>
+                                                  {/* 左下: 合計対応 */}
+                                                  <div className="bg-gray-950/75 p-2 rounded-lg border border-gray-900/55 flex flex-col">
+                                                    <span className="text-[9px] text-gray-500 font-black text-left">合計対応</span>
+                                                    <span className="text-emerald-400 font-black text-sm mt-0.5 text-right">{totalFulfilled}{representativeItem.unit || '個'}</span>
+                                                  </div>
+                                                  {/* 右下: カート数 */}
+                                                  <div className="bg-gray-950/75 p-2 rounded-lg border border-gray-900/55 flex flex-col">
+                                                    <span className="text-[9px] text-gray-500 font-black text-left">カート数</span>
+                                                    <span className="text-amber-400 font-black text-sm mt-0.5 text-right">
+                                                      {(Math.round((totalQuantity / 24) * 2) / 2).toFixed(1)}
+                                                      <span className="text-[9px] text-gray-500 font-normal ml-0.5">カート</span>
+                                                    </span>
+                                                  </div>
+                                                </div>
+
+                                                {/* Instruction Text footer / timestamp */}
+                                                <div className="flex items-center justify-between gap-1 text-[9px] text-gray-500 mt-3.5">
+                                                  <div className="flex items-center gap-1 font-mono">
+                                                    <span className="text-gray-600 font-semibold">最終追加:</span>
+                                                    <span>{formatDate(latestCreatedAt)}</span>
+                                                  </div>
+                                                  <span className="text-[9px] text-blue-400/80 font-black tracking-tight animate-pulse shrink-0">
+                                                    売場内訳を表示
+                                                  </span>
+                                                </div>
                                               </div>
-                                              <span className="text-gray-800 select-none">|</span>
-                                              <div className="flex items-center gap-1">
-                                                <span className="text-[9px] text-gray-500 font-black uppercase">対応:</span>
-                                                <span className="text-emerald-400 font-extrabold">{item.fulfilledQuantity || 0}{item.unit || '個'}</span>
-                                              </div>
-                                              <span className="text-gray-800 select-none">|</span>
-                                              <div className="flex items-center gap-1">
-                                                <span className="text-[9px] text-gray-500 font-black uppercase">残り:</span>
-                                                <span className={`font-extrabold ${Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0)) > 0 ? 'text-orange-400' : 'text-emerald-500'}`}>
-                                                  {Math.max(0, (parseInt(item.quantity) || 0) - (item.fulfilledQuantity || 0))}{item.unit || '個'}
-                                                </span>
-                                              </div>
                                             </div>
-
-                                            {/* 6行目: 受付日時 */}
-                                            <div className="flex items-center gap-1 text-[9px] text-gray-500 font-mono mt-1.5">
-                                              <span className="text-gray-600 font-bold">受付日時:</span>
-                                              <span>{formatDate(item.createdAt)}</span>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </motion.div>
-                                    ))}
+                                          </motion.div>
+                                        );
+                                      });
+                                    })()}
                                   </AnimatePresence>
                                 </div>
                               </div>
@@ -1048,6 +1137,211 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* 売り場内訳詳細モーダル */}
+      <AnimatePresence>
+        {selectedGroupJan && (() => {
+          const groupItems = getSelectedGroupItems();
+          if (groupItems.length === 0) return null;
+          const representativeItem = groupItems[0];
+          
+          // Calculate overall stats for header
+          const totalQuantity = groupItems.reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0);
+          const totalFulfilled = groupItems.reduce((sum, item) => sum + (item.fulfilledQuantity || 0), 0);
+          const totalRemaining = Math.max(0, totalQuantity - totalFulfilled);
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedGroupJan(null)}
+                className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              />
+
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                transition={{ type: 'spring', duration: 0.35 }}
+                className="relative w-full max-w-lg bg-gray-900 border border-gray-800 rounded-3xl overflow-hidden shadow-2xl z-10 flex flex-col max-h-[85vh]"
+              >
+                {/* Header */}
+                <div className="p-5 border-b border-gray-800 bg-gray-905 sticky top-0 z-10 flex items-start justify-between gap-4">
+                  <div>
+                    {representativeItem.maker && (
+                      <span className="text-[10px] uppercase font-black tracking-wider text-amber-500/80 bg-amber-500/10 px-2 py-0.5 rounded">
+                        {representativeItem.maker}
+                      </span>
+                    )}
+                    <h3 className="text-base font-black text-white mt-1.5 leading-tight break-all">
+                      {representativeItem.productName}
+                    </h3>
+                    {representativeItem.janCode && (
+                      <p className="text-[11px] font-mono text-gray-500 mt-1 flex items-center gap-1.5">
+                        <span className="text-gray-600 font-bold uppercase">JAN:</span>
+                        <span className="text-blue-400 font-bold tracking-wider">{representativeItem.janCode}</span>
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setSelectedGroupJan(null)}
+                    className="p-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-full transition-colors active:scale-95 shrink-0"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Aggregated stats */}
+                <div className="px-5 py-3.5 bg-gray-950/60 border-b border-gray-800/60 grid grid-cols-3 gap-2.5 text-center">
+                  <div className="bg-gray-900/65 rounded-xl p-2 border border-gray-850">
+                    <div className="text-[8px] text-gray-500 font-black uppercase tracking-wider mb-0.5">合計受付</div>
+                    <div className="text-sm font-black text-blue-400">{totalQuantity}{representativeItem.unit || '個'}</div>
+                  </div>
+                  <div className="bg-gray-900/65 rounded-xl p-2 border border-gray-850">
+                    <div className="text-[8px] text-gray-500 font-black uppercase tracking-wider mb-0.5">合計対応</div>
+                    <div className="text-sm font-black text-emerald-400">{totalFulfilled}{representativeItem.unit || '個'}</div>
+                  </div>
+                  <div className="bg-gray-900/65 rounded-xl p-2 border border-gray-850">
+                    <div className="text-[8px] text-gray-500 font-black uppercase tracking-wider mb-0.5">残り不足</div>
+                    <div className={`text-sm font-black ${totalRemaining > 0 ? 'text-orange-400 animate-pulse' : 'text-emerald-500'}`}>
+                      {totalRemaining}{representativeItem.unit || '個'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scrollable Location list details */}
+                <div className="p-5 overflow-y-auto space-y-3 flex-1">
+                  <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest pl-1 mb-2">
+                    📍 売り場ごとの補充内訳
+                  </div>
+                  
+                  {groupItems.map((subItem) => {
+                    const remainingItemQty = Math.max(0, (parseInt(subItem.quantity) || 0) - (subItem.fulfilledQuantity || 0));
+                    return (
+                      <div 
+                        key={subItem.id} 
+                        className="bg-gray-950 border border-gray-850/80 rounded-2xl p-4 flex flex-col gap-3 shadow-md hover:border-gray-800 transition-colors"
+                      >
+                        {/* Location / Subcategory Badge + Created Time */}
+                        <div className="flex items-center justify-between gap-2 border-b border-gray-900/40 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 text-[10px] font-black rounded-md border uppercase tracking-wider ${
+                              subItem.subcategory === '客注' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+                              subItem.subcategory === '催事' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                              subItem.subcategory === 'エンド' ? 'bg-purple-500/25 text-purple-300 border-purple-500/30 font-black' :
+                              subItem.subcategory === 'その他' ? 'bg-zinc-800/85 text-zinc-400 border-zinc-700/60' :
+                              'bg-blue-500/20 text-blue-355 border-blue-500/30'
+                            }`}>
+                              {subItem.subcategory || '通常'}
+                            </span>
+                            <span className="text-[10px] text-gray-500 font-medium">売り場</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-1 text-[10px] text-gray-400 font-mono">
+                            <Clock size={10} className="text-gray-500" />
+                            <span>{formatDate(subItem.createdAt)}</span>
+                          </div>
+                        </div>
+
+                        {/* Interactive adjustment controls and status */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-900/40 p-2.5 rounded-xl border border-gray-850/65">
+                          {/* Quantities indicator */}
+                          <div className="flex items-center gap-2.5 text-xs text-gray-300 font-bold justify-between sm:justify-start">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] text-gray-500 uppercase tracking-wider">依頼:</span>
+                              <span className="text-gray-200">{subItem.quantity}{subItem.unit || '個'}</span>
+                            </div>
+                            <span className="text-gray-800 font-thin">|</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] text-gray-500 uppercase tracking-wider">実績:</span>
+                              <span className="text-emerald-400">{subItem.fulfilledQuantity || 0}{subItem.unit || '個'}</span>
+                            </div>
+                            <span className="text-gray-800 font-thin">|</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] text-gray-500 uppercase tracking-wider">不足:</span>
+                              <span className={`${remainingItemQty > 0 ? 'text-orange-400' : 'text-emerald-500 font-black'}`}>
+                                {remainingItemQty}{subItem.unit || '個'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Controls */}
+                          <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 border-gray-900/30 pt-2 sm:pt-0">
+                            {/* Incremental modifier */}
+                            <div className="flex items-center bg-gray-950 border border-gray-850/80 rounded-xl p-0.5 select-none shrink-0">
+                              <button
+                                onClick={() => updateFulfilledQuantity(subItem, -1)}
+                                disabled={!(subItem.fulfilledQuantity && subItem.fulfilledQuantity > 0)}
+                                className={`w-6 h-6 flex items-center justify-center rounded-lg transition-colors text-xs font-black ${
+                                  (subItem.fulfilledQuantity && subItem.fulfilledQuantity > 0)
+                                    ? 'bg-gray-800 hover:bg-gray-700 active:bg-gray-750 text-gray-300 cursor-pointer'
+                                    : 'text-gray-700 cursor-not-allowed'
+                                }`}
+                                title="-1"
+                              >
+                                ー
+                              </button>
+                              <span className="px-2 text-[10px] font-black text-gray-300 min-w-[1.2rem] text-center">
+                                {subItem.fulfilledQuantity || 0}
+                              </span>
+                              <button
+                                onClick={() => updateFulfilledQuantity(subItem, 1)}
+                                disabled={subItem.status === 'completed'}
+                                className={`w-6 h-6 flex items-center justify-center rounded-lg transition-colors text-xs font-black ${
+                                  subItem.status === 'completed'
+                                    ? 'text-gray-700 cursor-not-allowed'
+                                    : 'bg-gray-800 hover:bg-gray-700 active:bg-gray-750 text-gray-300 cursor-pointer'
+                                }`}
+                                title="+1"
+                              >
+                                ＋
+                              </button>
+                            </div>
+
+                            {/* Done check button */}
+                            <button
+                              onClick={() => toggleStatus(subItem)}
+                              className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold flex items-center gap-1 active:scale-95 transition-all select-none cursor-pointer leading-none ${
+                                subItem.status === 'completed'
+                                  ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/10'
+                              }`}
+                            >
+                              {subItem.status === 'completed' ? (
+                                <>
+                                  <Check size={10} strokeWidth={3} />
+                                  <span>未完了へ</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check size={10} strokeWidth={3} />
+                                  <span>完了</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Footer close */}
+                <div className="p-4 border-t border-gray-800 bg-gray-905 flex justify-end">
+                  <button
+                    onClick={() => setSelectedGroupJan(null)}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-gray-800 hover:bg-gray-750 text-gray-200 hover:text-white rounded-xl text-xs font-black transition-colors cursor-pointer"
+                  >
+                    閉じる
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
     </div>
   );
