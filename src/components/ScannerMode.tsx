@@ -19,6 +19,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     productName: string;
     maker?: string;
     size?: string;
+    genre?: string;
     remarks?: string;
     unit?: string;
   } | null>(null);
@@ -34,6 +35,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   const [editableMaker, setEditableMaker] = useState('');
   const [masterSize, setMasterSize] = useState('');
+  const [masterGenre, setMasterGenre] = useState('その他');
   const [masterRemarks, setMasterRemarks] = useState('');
   const [isRegisteringMaster, setIsRegisteringMaster] = useState(false);
   const [masterRegisterSuccess, setMasterRegisterSuccess] = useState(false);
@@ -108,6 +110,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
           caseJanCode: docData.caseJanCode || undefined,
           maker: docData.maker || undefined,
           size: docData.size || undefined,
+          genre: docData.genre || undefined,
           remarks: docData.remarks || undefined,
           unit: docData.unit || undefined,
           imageUrl: undefined
@@ -343,6 +346,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
     setMatchedMaster(null);
     setEditableMaker('');
     setMasterSize('');
+    setMasterGenre('その他');
     setMasterRemarks('');
     setMasterRegisterSuccess(false);
 
@@ -358,6 +362,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         setEditableProductName(masterProd.productName);
         setEditableMaker(masterProd.maker || '');
         setMasterSize(masterProd.size || '');
+        setMasterGenre(masterProd.genre || 'その他');
         setMasterRemarks(masterProd.remarks || '');
         if (masterProd.unit) {
           setUnit(masterProd.unit);
@@ -443,6 +448,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         productName: nameToRegister,
         maker: (editableMaker || '').trim() || null,
         size: (masterSize || '').trim() || null,
+        genre: masterGenre || 'その他',
         remarks: (masterRemarks || '').trim() || null,
         unit: unit || null
       };
@@ -517,6 +523,7 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
         productName: (editableProductName || '').trim(),
         maker: (editableMaker || '').trim() || null,
         size: (masterSize || '').trim() || null,
+        genre: masterGenre || 'その他',
         remarks: (masterRemarks || '').trim() || null,
         unit: unit || null
       };
@@ -889,6 +896,23 @@ export default function ScannerMode({ onBack }: ScannerModeProps) {
                       <option value="パック">パック</option>
                       <option value="缶">缶</option>
                       <option value="シート">シート</option>
+                      <option value="その他">その他</option>
+                    </select>
+                  </div>
+
+                  <div className="col-span-2 space-y-1">
+                    <label className="block text-[9px] text-indigo-800 font-black uppercase pl-0.5">ジャンル (分類)</label>
+                    <select
+                      value={masterGenre}
+                      onChange={(e) => setMasterGenre(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-indigo-200 text-xs font-bold text-gray-950 outline-none rounded-xl focus:border-indigo-500 transition-colors cursor-pointer"
+                    >
+                      <option value="水・炭酸水">水・炭酸水</option>
+                      <option value="茶系飲料">茶系飲料</option>
+                      <option value="ジュース">ジュース</option>
+                      <option value="紅茶・コーヒー">紅茶・コーヒー</option>
+                      <option value="健康飲料">健康飲料</option>
+                      <option value="エナジー飲料">エナジー飲料</option>
                       <option value="その他">その他</option>
                     </select>
                   </div>
