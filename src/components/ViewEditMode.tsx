@@ -407,6 +407,17 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
     return priA - priB;
   };
 
+  const sortByRemainingDesc = (a: ReplenishmentItem, b: ReplenishmentItem) => {
+    const remA = Math.max(0, (parseInt(a.quantity) || 0) - (a.fulfilledQuantity || 0));
+    const remB = Math.max(0, (parseInt(b.quantity) || 0) - (b.fulfilledQuantity || 0));
+
+    if (remB !== remA) {
+      return remB - remA; // Descending order of remaining quantity
+    }
+
+    return sortAlphabetically(a, b);
+  };
+
   // Filter datasets based on status and search queries
   const activePendingItems = items.filter(item => item.status === 'pending');
   
@@ -630,7 +641,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                         {(() => {
                           const categoryItems = activePendingItems
                             .filter((item) => getCategoryForItem(item) === activeCategory)
-                            .sort(sortAlphabetically);
+                            .sort(sortByRemainingDesc);
 
                           if (categoryItems.length === 0) {
                             return (
@@ -688,7 +699,18 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                                           });
 
                                           // 2. Render each group
-                                          return Object.entries(groups).map(([groupKey, groupItems]) => {
+                                          return Object.entries(groups).sort((entryA, entryB) => {
+                                             const itemsA = entryA[1];
+                                             const itemsB = entryB[1];
+                                             const remA = itemsA.reduce((sum, i) => sum + Math.max(0, (parseInt(i.quantity) || 0) - (i.fulfilledQuantity || 0)), 0);
+                                             const remB = itemsB.reduce((sum, i) => sum + Math.max(0, (parseInt(i.quantity) || 0) - (i.fulfilledQuantity || 0)), 0);
+                                             if (remB !== remA) {
+                                               return remB - remA;
+                                             }
+                                             const nameA = itemsA[0]?.productName || '';
+                                             const nameB = itemsB[0]?.productName || '';
+                                             return nameA.localeCompare(nameB, 'ja-JP');
+                                           }).map(([groupKey, groupItems]) => {
                                             const representativeItem = groupItems[0];
                                             const isSelected = selectedGroupJan === groupKey;
 
@@ -925,7 +947,7 @@ export default function ViewEditMode({ initialTab, onBack }: ViewEditModeProps) 
                       {(() => {
                         const categoryItems = filteredReplenishmentList
                           .filter((item) => getCategoryForItem(item) === activeCategory)
-                          .sort(sortAlphabetically);
+                          .sort(sortByRemainingDesc);
 
                         if (categoryItems.length === 0) {
                           return (
